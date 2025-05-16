@@ -1,0 +1,56 @@
+.app-container {
+  display: flex;
+  gap: 20px;
+}
+
+.upload-section {
+  flex: 2;
+}
+
+.history-section {
+  flex: 1;
+  background: #f5f5f5;
+  padding: 20px;
+  border-radius: 8px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.job-history h3 {
+  margin-top: 0;
+}
+
+.job-history ul {
+  list-style-type: none;
+  padding: 0;
+}
+
+.job-history li {
+  padding: 10px;
+  border-bottom: 1px solid #ddd;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.job-history li:hover {
+  background-color: #e9e9e9;
+}
+
+.job-item {
+  display: flex;
+  justify-content: space-between;
+}
+
+.job-description {
+  flex: 2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.job-date {
+  flex: 1;
+  text-align: right;
+  color: #666;
+  font-size: 0.9em;
+}
