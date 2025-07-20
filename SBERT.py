@@ -278,7 +278,8 @@ def process_resumes_and_job_description(job_description, folder_path):
         print(f"Resume: {filename}\nSimilarity Score: {similarity_score:.4f}\nExtracted Skills: {extracted_skills}\n")
 
 job_description = "SQL, javascript, HTML, Java, CSS,python"
-folder_path = "C:/Users/Vidhi/Documents/PROJECTS/RESUME MATCH/RESUME"  
+folder_path = '/home/suraj/Desktop/project/7th Sem Project/resume-matcher-ml/resumes'
+ 
 process_resumes_and_job_description(job_description, folder_path)
 
 

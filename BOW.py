@@ -45,7 +45,9 @@ from sklearn.feature_extraction.text import CountVectorizer
 
 def text_to_bow_vector(texts):
     vectorizer = CountVectorizer()
+    
     vectors = vectorizer.fit_transform(texts)
+    print(vectors)
     return vectors, vectorizer
 
 # Similarity Calculation Function
@@ -80,7 +82,8 @@ def match_resumes_with_job(job_desc_text, folder_path):
 
 # Implementation
 job_description = input("Your job description text here")
-folder_path = "C:/Users/Vidhi/Documents/PROJECTS/RESUME MATCH/RESUME"
+folder_path = 'RESUME'
+
 
 matched_resumes = match_resumes_with_job(job_description, folder_path)
 for resume, score in matched_resumes:

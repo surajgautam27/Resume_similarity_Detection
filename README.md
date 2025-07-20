@@ -1,68 +1,267 @@
-# Resume Matcher Using BERT and SBERT Models
+# Resume Matcher - Full Stack Application
 
-![IMG_202410050218160](https://github.com/user-attachments/assets/702242b3-6700-4b4e-b724-263d583186ee)
-
-
-## Project Overview
-
-**Resume Matcher** is a project designed to match resumes to job descriptions using state-of-the-art Natural Language Processing (NLP) techniques. The tool utilizes **BERT** (Bidirectional Encoder Representations from Transformers) and **SBERT** (Sentence-BERT) to capture the deeper semantic meaning in the text. By converting resumes and job descriptions into numerical embeddings, the system can efficiently compute similarity scores and rank resumes according to their relevance to a given job description. 
-
-The key objective of this project is to automate and improve the hiring process by providing a data-driven solution that matches job requirements with the most suitable candidates.
-
-## How It Works
-
-1. **Text Extraction**:
-   * Resumes are typically in PDF format and the project uses libraries like **PyPDF2** to extract the textual content from these PDFs.
-   * The job descriptions are provided via text input or uploaded as a file.
-   * This step ensures that both the job description and the resumes are ready for analysis by extracting all necessary textual information.
-
-2. **Text Preprocessing**:
-   * The extracted text from both resumes and job descriptions is cleaned using several preprocessing techniques:
-     * Removal of special characters, punctuation, URLs, emails, and other irrelevant elements.
-     * Conversion of text to lowercase to standardize the format.
-     * Tokenization, which splits the text into individual words or subwords, depending on the model being used (BERT or SBERT).
-   * This preprocessing step ensures that the text is in a clean, normalized form suitable for input into machine learning models.
-
-3. **Embedding Generation**:
-   * **BERT** and **SBERT** models are used to convert the preprocessed text into **embeddings**. These embeddings are high-dimensional vector representations that capture the meaning of the text.
-   * **BERT** is a transformer model pre-trained on a large corpus of text. It can generate context-aware embeddings for each word in the resume and job description.
-   * **SBERT** is an extension of BERT that generates sentence-level embeddings, making it particularly effective for comparing entire resumes to job descriptions.
-   * These embeddings allow the system to understand not just the words used but the context and meaning behind them.
-
-4. **Cosine Similarity**:
-   * Once the embeddings are generated, **cosine similarity** is used to calculate the similarity between each resume and the job description.
-   * Cosine similarity is a metric that measures how close two vectors (in this case, the resume and job description embeddings) are in high-dimensional space. A score closer to 1 indicates a strong match, while a score closer to 0 indicates a weak match.
-   * This allows the system to quantify how well a candidate’s resume matches the job description based on the semantic meaning of their content.
-
-5. **Ranking Resumes**:
-   * The resumes are ranked based on their cosine similarity scores, with the highest-scoring resumes being the most relevant to the job description.
-   * This ranking helps the recruiter quickly identify the top candidates for the position without manually reviewing each resume.
-   * The ranked list can be displayed in the application’s GUI, allowing for easy interaction and further analysis.
+A modern web application for matching resumes to job descriptions using **advanced similarity algorithms** including **cosine similarity**, TF-IDF, and hybrid matching techniques.
 
 ## Features
 
-* **Advanced NLP Models**: The project leverages cutting-edge NLP models, **BERT** and **SBERT**, for semantic understanding and matching.
-* **PDF Resume Parsing**: Extracts text from resumes in PDF format using **PyPDF2**, making the tool versatile in handling common resume formats.
-* **Text Cleaning and Preprocessing**: Cleans, tokenizes, and normalizes text to prepare it for deep learning models.
-* **Cosine Similarity**: A powerful method for comparing the semantic similarity between job descriptions and resumes, providing highly accurate matching.
-* **Resume Ranking**: Provides a ranked list of resumes based on their relevance to the job description, making the recruitment process faster and more efficient.
-* **User Interface**: Includes a simple, user-friendly **Tkinter**-based GUI that allows users to input job descriptions and upload resumes for analysis.
+- **User Authentication**: Secure login/register system with JWT tokens
+- **Job Management**: Create, edit, and manage job descriptions
+- **Resume Upload**: Upload and process PDF resumes with automatic text extraction
+- **Advanced Matching**: **Cosine similarity**, TF-IDF, and hybrid algorithms for precise resume-to-job matching
+- **Detailed Scoring**: Comprehensive breakdown of similarity scores across multiple dimensions
+- **Analytics Dashboard**: Comprehensive analytics and insights with similarity metrics
+- **Modern UI**: Beautiful, responsive interface built with Material-UI
+- **Real-time Processing**: Instant resume parsing and skill extraction
 
-## Dependencies
+## Advanced Matching Algorithms
 
-* **Transformers**: Provides pre-trained BERT and SBERT models for generating embeddings.
-* **Sentence-Transformers**: Used for SBERT-based sentence-level embeddings and similarity calculations.
-* **scikit-learn**: Used for calculating cosine similarity between resume and job description embeddings.
-* **PyPDF2**: Extracts text from PDF resumes for processing.
-* **Tkinter**: Used to build the user-friendly graphical interface that allows recruiters to interact with the tool.
+### 1. **Cosine Similarity**
+- Calculates the cosine of the angle between two text vectors
+- Measures semantic similarity between job descriptions and resumes
+- Handles high-dimensional text data efficiently
+- Provides scores between 0 and 1 (0% to 100%)
 
-## Results
+### 2. **TF-IDF Similarity**
+- Term Frequency-Inverse Document Frequency based similarity
+- Weights important terms more heavily
+- Reduces impact of common words
+- More sophisticated than simple word matching
 
-The project demonstrates that **BERT** and **SBERT** models outperform traditional methods like **Bag-of-Words** in accurately matching resumes to job descriptions. The use of these advanced models provides deeper semantic understanding, which leads to more relevant and precise candidate matches.
+### 3. **Jaccard Similarity**
+- Set-based similarity for skills matching
+- Measures overlap between required and candidate skills
+- Handles skill variations and synonyms
 
-* **BERT and SBERT models** effectively capture the contextual meaning of both resumes and job descriptions, resulting in higher accuracy when matching candidates to roles.
-* **Cosine similarity** between the job description and resumes allows for efficient ranking, ensuring the most relevant candidates are prioritized.
-* The **ranking system** enables recruiters to quickly identify top candidates, making the hiring process faster and more reliable.
-* **SBERT** provides better results in sentence-level similarity comparisons, offering an advantage in matching resumes to more detailed or nuanced job descriptions.
+### 4. **Hybrid Weighted Scoring**
+- Combines multiple similarity measures with configurable weights
+- Balances different aspects: skills, experience, education, keywords
+- Provides detailed breakdown for each matching dimension
 
-In summary, **BERT** and **SBERT** models significantly improve the resume matching process compared to traditional methods, providing a more sophisticated and reliable approach to shortlisting candidates.
+## Tech Stack
+
+### Frontend
+- **React 18** - Modern React with hooks
+- **Material-UI** - Beautiful, accessible UI components
+- **React Router** - Client-side routing
+- **React Query** - Server state management
+- **Axios** - HTTP client
+- **React Dropzone** - File upload handling
+- **React Toastify** - Notifications
+
+### Backend
+- **Node.js** - JavaScript runtime
+- **Express.js** - Web framework
+- **MongoDB** - NoSQL database
+- **Mongoose** - MongoDB ODM
+- **JWT** - Authentication
+- **Multer** - File upload handling
+- **PDF-Parse** - PDF text extraction
+- **Natural** - NLP processing
+- **Custom Similarity Algorithms** - Cosine similarity, TF-IDF, Jaccard
+
+## Prerequisites
+
+- Node.js (v16 or higher)
+- MongoDB (v4.4 or higher)
+- npm or yarn
+
+## Installation
+
+### 1. Clone the repository
+```bash
+git clone <repository-url>
+cd resume-matcher-ml
+```
+
+### 2. Install dependencies
+```bash
+# Install frontend dependencies
+npm install
+
+# Install backend dependencies
+cd backend
+npm install
+cd ..
+```
+
+### 3. Set up environment variables
+
+Create a `.env` file in the `backend` directory:
+```bash
+# MongoDB Configuration
+MONGODB_URI=mongodb://localhost:27017/resume-matcher
+
+# JWT Secret
+JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+
+# Server Configuration
+PORT=5000
+NODE_ENV=development
+```
+
+### 4. Start MongoDB
+Make sure MongoDB is running on your system:
+```bash
+# On Ubuntu/Debian
+sudo systemctl start mongod
+
+# On macOS with Homebrew
+brew services start mongodb-community
+
+# On Windows
+net start MongoDB
+```
+
+### 5. Start the application
+
+#### Development mode (both frontend and backend)
+```bash
+npm run dev
+```
+
+#### Or start them separately:
+
+**Backend:**
+```bash
+cd backend
+npm start
+```
+
+**Frontend:**
+```bash
+npm start
+```
+
+The application will be available at:
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:5000
+
+## Usage
+
+### 1. Register/Login
+- Navigate to http://localhost:3000
+- Create a new account or login with existing credentials
+
+### 2. Create Jobs
+- Go to the Jobs section
+- Click "Create New Job"
+- Fill in job details including title, description, requirements, and skills
+
+### 3. Upload Resumes
+- Go to the Resumes section
+- Click "Upload Resume" or drag and drop PDF files
+- The system will automatically extract text and identify skills
+
+### 4. Match Resumes to Jobs
+- Go to the Matching section
+- Select a job and resumes to match
+- View detailed similarity scores including:
+  - **Cosine Similarity Score**
+  - **TF-IDF Similarity Score**
+  - **Skills Similarity (Jaccard)**
+  - **Experience Match**
+  - **Education Match**
+  - **Keyword Overlap**
+
+### 5. View Analytics
+- Go to the Analytics section
+- View comprehensive statistics including average similarity scores
+- Analyze matching performance across different algorithms
+
+## API Endpoints
+
+### Authentication
+- `POST /api/auth/register` - Register new user
+- `POST /api/auth/login` - Login user
+- `GET /api/auth/profile` - Get user profile
+- `PUT /api/auth/profile` - Update profile
+- `PUT /api/auth/change-password` - Change password
+
+### Jobs
+- `GET /api/jobs` - Get all jobs
+- `POST /api/jobs` - Create new job
+- `GET /api/jobs/:id` - Get specific job
+- `PUT /api/jobs/:id` - Update job
+- `DELETE /api/jobs/:id` - Delete job
+- `GET /api/jobs/search` - Search jobs
+
+### Resumes
+- `GET /api/resumes` - Get all resumes
+- `POST /api/resumes/upload` - Upload single resume
+- `POST /api/resumes/upload-multiple` - Upload multiple resumes
+- `GET /api/resumes/:id` - Get specific resume
+- `DELETE /api/resumes/:id` - Delete resume
+- `GET /api/resumes/search` - Search resumes
+
+### Matching
+- `POST /api/matching/job/:jobId` - Match resumes to job using cosine similarity
+- `GET /api/matching/job/:jobId` - Get matches for job
+- `PUT /api/matching/:matchId/status` - Update match status
+- `GET /api/matching/analytics` - Get analytics with similarity metrics
+- `GET /api/matching/:matchId/analysis` - Get detailed similarity analysis
+
+## Database Schema
+
+### Users
+- name, email, password, role, company, isActive, lastLogin
+
+### Jobs
+- title, description, requirements, skills, experience, location, type, salary, department, status, createdBy, company, tags, priority
+
+### Resumes
+- filename, originalName, filePath, fileSize, mimeType, extractedText, candidate, skills, experience, education, languages, certifications, projects, uploadedBy, status, processed
+
+### Matches
+- job, resume, score, breakdown (including cosineSimilarity, tfidfSimilarity), status, notes, reviewedBy, reviewedAt, tags, priority, algorithm, processingTime
+
+## Similarity Algorithms Explained
+
+### Cosine Similarity
+```javascript
+cosine_similarity = dot_product(A, B) / (magnitude(A) * magnitude(B))
+```
+- Measures the cosine of the angle between two vectors
+- Range: 0 to 1 (0% to 100%)
+- Perfect match = 1.0, No similarity = 0.0
+
+### TF-IDF Similarity
+- **Term Frequency (TF)**: How often a term appears in a document
+- **Inverse Document Frequency (IDF)**: How rare a term is across all documents
+- **TF-IDF Score**: TF × IDF
+- Provides better weighting for important terms
+
+### Jaccard Similarity
+```javascript
+jaccard_similarity = |A ∩ B| / |A ∪ B|
+```
+- Measures overlap between two sets
+- Perfect for skills matching
+- Range: 0 to 1
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License.
+
+## Support
+
+For support, please open an issue on GitHub or contact the development team.
+
+## Future Enhancements
+
+- **BERT/SBERT Integration** - Advanced semantic similarity using transformer models
+- **Word2Vec Embeddings** - Pre-trained word vectors for better semantic understanding
+- **Custom Training** - Domain-specific model training on resume/job data
+- **Real-time Matching** - Live similarity updates as resumes are uploaded
+- **Multi-language Support** - Similarity algorithms for different languages
+- **Advanced Analytics** - Detailed similarity trend analysis
+- **API Rate Limiting** - Protect similarity computation resources
+- **Caching** - Cache similarity results for performance
+- **Batch Processing** - Efficient bulk similarity calculations
