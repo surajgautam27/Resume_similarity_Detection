@@ -4,7 +4,7 @@ import axios from 'axios';
 
 export default function Register() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'developer' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -18,9 +18,7 @@ export default function Register() {
     setError('');
     try {
       const res = await axios.post('/api/auth/register', form);
-      // Save token to localStorage or context if needed
       localStorage.setItem('token', res.data.token);
-      // Redirect to dashboard
       navigate('/dashboard');
     } catch (err) {
       setError(
@@ -70,6 +68,18 @@ export default function Register() {
             style={{ width: '100%', padding: 8, marginTop: 4 }}
           />
         </div>
+        <div style={{ marginBottom: 16 }}>
+          <label>Role</label>
+          <select
+            name="role"
+            value={form.role}
+            onChange={handleChange}
+            style={{ width: '100%', padding: 8, marginTop: 4 }}
+          >
+            <option value="developer">Developer</option>
+            <option value="company">Company</option>
+          </select>
+        </div>
         {error && <div style={{ color: 'red', marginBottom: 12 }}>{error}</div>}
         <button type="submit" disabled={loading} style={{ width: '100%', padding: 10, background: '#1976d2', color: '#fff', border: 'none', borderRadius: 4 }}>
           {loading ? 'Registering...' : 'Register'}
@@ -77,4 +87,4 @@ export default function Register() {
       </form>
     </div>
   );
-} 
+}

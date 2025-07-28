@@ -19,6 +19,7 @@ import Resumes from './pages/Resumes';
 import Matching from './pages/Matching';
 import Analytics from './pages/Analytics';
 import Profile from './pages/Profile';
+import CompanyDashboard from './pages/CompanyDashboard';
 
 // Create theme
 const theme = createTheme({
@@ -189,6 +190,16 @@ function App() {
                     <ProtectedRoute>
                       <Layout>
                         <Profile />
+                      </Layout>
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/company-dashboard" 
+                  element={
+                    <ProtectedRoute>
+                      <Layout>
+                        <CompanyDashboard />
                       </Layout>
                     </ProtectedRoute>
                   } 

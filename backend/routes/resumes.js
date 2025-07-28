@@ -45,6 +45,13 @@ const upload = multer({
 // Upload single resume
 router.post('/upload', auth, upload.single('resume'), async (req, res) => {
   try {
+    console.log('Resume upload request:', {
+      userId: req.user.userId,
+      userRole: req.user.role,
+      hasFile: !!req.file,
+      filename: req.file?.originalname
+    });
+
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
@@ -54,11 +61,21 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
     const pdfData = await pdfParse(pdfBuffer);
     const extractedText = pdfData.text;
 
+    console.log('PDF parsed:', {
+      textLength: extractedText.length,
+      pages: pdfData.numpages
+    });
+
     // Extract candidate information
     const candidateInfo = extractCandidateInfo(extractedText);
     
     // Extract skills
     const skills = extractSkills(extractedText);
+
+    console.log('Extracted info:', {
+      candidate: candidateInfo,
+      skills: skills
+    });
 
     // Create resume record
     const resume = new Resume({
@@ -82,6 +99,15 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
     });
 
     await resume.save();
+
+    console.log('Resume saved successfully:', {
+      id: resume._id,
+      filename: resume.filename,
+      originalName: resume.originalName,
+      candidate: resume.candidate,
+      skills: resume.skills,
+      uploadedBy: resume.uploadedBy
+    });
 
     res.status(201).json({
       message: 'Resume uploaded and processed successfully',
@@ -202,6 +228,21 @@ router.get('/', auth, async (req, res) => {
     if (search) {
       query.$text = { $search: search };
     }
+
+    // RBAC logic
+    if (req.user.role === 'company') {
+      // Find all jobs posted by this company
+      const Job = require('../models/Job');
+      const jobs = await Job.find({ createdBy: req.user.userId });
+      // Collect all resume IDs from applications to these jobs
+      const resumeIds = jobs.flatMap(job => (job.applications || []).map(app => app.resume)).filter(Boolean);
+      // Only show resumes that have applied to this company's jobs
+      query._id = { $in: resumeIds };
+    } else if (req.user.role === 'developer') {
+      // Only show resumes uploaded by this developer
+      query.uploadedBy = req.user.userId;
+    }
+    // else: admin, show all resumes
 
     const sortOptions = {};
     sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;

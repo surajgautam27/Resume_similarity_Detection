@@ -68,7 +68,21 @@ const jobSchema = new mongoose.Schema({
     type: String,
     enum: ['low', 'medium', 'high', 'urgent'],
     default: 'medium'
-  }
+  },
+  applications: [{
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    resume: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Resume'
+    },
+    appliedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }]
 }, {
   timestamps: true
 });
@@ -76,4 +90,4 @@ const jobSchema = new mongoose.Schema({
 // Index for search functionality
 jobSchema.index({ title: 'text', description: 'text', skills: 'text' });
 
-module.exports = mongoose.model('Job', jobSchema); 
+module.exports = mongoose.model('Job', jobSchema);

@@ -7,52 +7,22 @@ const auth = require('../middleware/auth');
 const router = express.Router();
 
 // Register user
-router.post('/register', [
-  body('name').trim().isLength({ min: 2 }).withMessage('Name must be at least 2 characters'),
-  body('email').isEmail().normalizeEmail().withMessage('Please provide a valid email'),
-  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-  body('role').optional().isIn(['admin', 'recruiter', 'hr']).withMessage('Invalid role')
-], async (req, res) => {
+router.post('/register', async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+    const { name, email, password, role } = req.body;
+
+    // Validate role
+    if (!['company', 'developer'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role selected' });
     }
 
-    const { name, email, password, role, company } = req.body;
-
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ error: 'User already exists with this email' });
-    }
-
-    // Create new user
-    const user = new User({
-      name,
-      email,
-      password,
-      role: role || 'recruiter',
-      company
-    });
-
+    const user = new User({ name, email, password, role });
     await user.save();
 
-    // Generate JWT token
-    const token = jwt.sign(
-      { userId: user._id, email: user.email, role: user.role },
-      process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '24h' }
-    );
-
-    res.status(201).json({
-      message: 'User registered successfully',
-      token,
-      user: user.toJSON()
-    });
+    res.status(201).json({ message: 'User registered successfully', user });
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ error: 'Server error during registration' });
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
@@ -191,4 +161,4 @@ router.put('/change-password', auth, [
   }
 });
 
-module.exports = router; 
+module.exports = router;

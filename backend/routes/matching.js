@@ -353,4 +353,14 @@ router.post('/adhoc', auth, async (req, res) => {
   }
 });
 
-module.exports = router; 
+// Handle job application
+const handleApply = async () => {
+  try {
+    await axios.post(`/api/jobs/${jobId}/apply`, { resumeId: selectedResumeId });
+    alert('Applied successfully!');
+  } catch (error) {
+    alert('Failed to apply for the job.');
+  }
+};
+
+module.exports = router;

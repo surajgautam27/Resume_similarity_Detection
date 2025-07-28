@@ -73,6 +73,17 @@ const Dashboard = () => {
     }
   ];
 
+  // Add company-specific stats
+  if (user?.role === 'company') {
+    stats.push({
+      title: 'Job Applications',
+      value: 'View All',
+      icon: <BusinessIcon sx={{ fontSize: 40, color: 'info.main' }} />,
+      color: 'info.main',
+      path: '/company-dashboard'
+    });
+  }
+
   const recentJobs = dashboardData?.jobs?.jobs?.slice(0, 5) || [];
   const recentResumes = dashboardData?.resumes?.resumes?.slice(0, 5) || [];
 
