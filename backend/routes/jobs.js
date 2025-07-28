@@ -206,13 +206,13 @@ router.delete('/:id', auth, async (req, res) => {
       return res.status(404).json({ error: 'Job not found' });
     }
 
-    // Check if user has permission to delete this job
+    // Only job creator or admin can delete
     if (job.createdBy._id.toString() !== req.user.userId && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Not authorized to delete this job' });
     }
 
     await Job.findByIdAndDelete(req.params.id);
-
+    
     res.json({ message: 'Job deleted successfully' });
   } catch (error) {
     console.error('Delete job error:', error);

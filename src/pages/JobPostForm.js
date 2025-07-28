@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
-export default function JobPostForm() {
+export default function JobPostForm({ onJobPosted }) {
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -49,6 +49,11 @@ export default function JobPostForm() {
         skills: '',
         priority: 'medium',
       });
+      
+      // Call the callback if provided
+      if (onJobPosted) {
+        onJobPosted();
+      }
     } catch (err) {
       if (err.response?.data?.errors) {
         setError(err.response.data.errors.map(e => e.msg).join(' '));
