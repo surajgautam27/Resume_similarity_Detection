@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
+import { showSuccess } from '../utils/toast';
 
 export default function JobList() {
   const { user } = useAuth();
@@ -119,7 +120,7 @@ export default function JobList() {
         ...prev,
         [jobId]: { ...prev[jobId], resumeId: newResume._id, uploading: false, uploadError: '', uploadProgress: 0 }
       }));
-      window.alert('Resume uploaded successfully!');
+              showSuccess('Resume uploaded successfully!');
     } catch (err) {
       setApplyState(prev => ({
         ...prev,

@@ -96,7 +96,14 @@ router.get('/profile', auth, async (req, res) => {
 // Update user profile
 router.put('/profile', auth, [
   body('name').optional().trim().isLength({ min: 2 }).withMessage('Name must be at least 2 characters'),
-  body('company').optional().trim()
+  body('company').optional().trim(),
+  body('profile').optional().isObject(),
+  body('profile.headline').optional().isString().isLength({ max: 140 }),
+  body('profile.bio').optional().isString().isLength({ max: 2000 }),
+  body('profile.skills').optional().isArray(),
+  body('profile.education').optional().isArray(),
+  body('profile.experience').optional().isArray(),
+  body('profile.social').optional().isObject()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -104,7 +111,7 @@ router.put('/profile', auth, [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, company } = req.body;
+    const { name, company, profile } = req.body;
     const user = await User.findById(req.user.userId);
 
     if (!user) {
@@ -113,6 +120,48 @@ router.put('/profile', auth, [
 
     if (name) user.name = name;
     if (company !== undefined) user.company = company;
+    if (profile) {
+      // Shallow merge profile to avoid overwriting unspecified subfields
+      user.profile = user.profile || {};
+      if (profile.headline !== undefined) user.profile.headline = String(profile.headline || '').trim();
+      if (profile.bio !== undefined) user.profile.bio = String(profile.bio || '').trim();
+      if (profile.skills !== undefined) {
+        const skills = Array.isArray(profile.skills) ? profile.skills : [];
+        user.profile.skills = skills
+          .map(s => (typeof s === 'string' ? s.trim() : ''))
+          .filter(Boolean);
+      }
+      if (profile.education !== undefined) {
+        const education = Array.isArray(profile.education) ? profile.education : [];
+        user.profile.education = education
+          .map(e => ({
+            school: (e?.school || '').trim(),
+            degree: (e?.degree || '').trim(),
+            field: (e?.field || '').trim(),
+            startYear: e?.startYear === '' || e?.startYear == null ? undefined : Number(e.startYear),
+            endYear: e?.endYear === '' || e?.endYear == null ? undefined : Number(e.endYear)
+          }))
+          .filter(e => e.school || e.degree || e.field);
+      }
+      if (profile.experience !== undefined) {
+        const experience = Array.isArray(profile.experience) ? profile.experience : [];
+        user.profile.experience = experience
+          .map(ex => ({
+            company: (ex?.company || '').trim(),
+            role: (ex?.role || '').trim(),
+            startDate: ex?.startDate ? (isNaN(Date.parse(ex.startDate)) ? undefined : new Date(ex.startDate)) : undefined,
+            endDate: ex?.endDate ? (isNaN(Date.parse(ex.endDate)) ? undefined : new Date(ex.endDate)) : undefined,
+            description: (ex?.description || '').trim()
+          }))
+          .filter(ex => ex.company || ex.role || ex.description);
+      }
+      if (profile.social !== undefined) {
+        user.profile.social = {
+          ...(user.profile.social || {}),
+          ...profile.social
+        };
+      }
+    }
 
     await user.save();
 

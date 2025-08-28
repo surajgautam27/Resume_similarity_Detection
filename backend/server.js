@@ -20,6 +20,7 @@ const authRoutes = require('./routes/auth');
 const jobRoutes = require('./routes/jobs');
 const resumeRoutes = require('./routes/resumes');
 const matchingRoutes = require('./routes/matching');
+const postRoutes = require('./routes/posts');
 
 // Security middleware
 app.use(helmet());
@@ -50,6 +51,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/resumes', resumeRoutes);
 app.use('/api/matching', matchingRoutes);
+app.use('/api/posts', postRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

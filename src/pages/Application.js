@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { showError } from '../utils/toast';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Application() {
@@ -37,7 +38,7 @@ export default function Application() {
       setSortedResumes(prev => ({ ...prev, [jobId]: res.data.matches }));
     } catch (err) {
       console.error('Error fetching matches:', err);
-      alert('Failed to fetch sorted resumes: ' + (err.response?.data?.error || err.message));
+      showError('Failed to fetch sorted resumes: ' + (err.response?.data?.error || err.message));
     } finally {
       setSortingJobId(null);
     }

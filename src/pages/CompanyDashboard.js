@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
+import { showError } from '../utils/toast';
 
 export default function CompanyDashboard() {
   const { user } = useAuth();
@@ -38,7 +39,7 @@ export default function CompanyDashboard() {
       setSortedResumes(prev => ({ ...prev, [jobId]: res.data.matches }));
     } catch (err) {
       console.error('Error fetching matches:', err);
-      alert('Failed to fetch sorted resumes: ' + (err.response?.data?.error || err.message));
+      showError('Failed to fetch sorted resumes: ' + (err.response?.data?.error || err.message));
     } finally {
       setSortingJobId(null);
     }
@@ -118,7 +119,7 @@ export default function CompanyDashboard() {
   if (!user || user.role !== 'company') return <div style={{ textAlign: 'center', padding: '40px' }}>Unauthorized - Company access only</div>;
 
   return (
-    <div style={{ maxWidth: 1200, margin: '40px auto', padding: 24, background: '#fff', borderRadius: 8, boxShadow: '0 2px 8px #eee' }}>
+    <div style={{ padding: 24, background: '#fff', borderRadius: 8, boxShadow: '0 2px 8px #eee' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
         <h1 style={{ margin: 0, color: '#2c3e50' }}>Company Dashboard</h1>
         <div style={{ fontSize: '16px', color: '#6c757d' }}>

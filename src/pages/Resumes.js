@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
+import { showSuccess, showError } from '../utils/toast';
 
 export default function Resumes() {
   const { user } = useAuth();
@@ -73,7 +74,7 @@ export default function Resumes() {
         fileInputRef.current.value = '';
       }
       
-      alert('Resume uploaded successfully!');
+      showSuccess('Resume uploaded successfully!');
     } catch (err) {
       setUploadError(err.response?.data?.error || 'Failed to upload resume.');
     } finally {
@@ -91,9 +92,9 @@ export default function Resumes() {
     try {
       await axios.delete(`/api/resumes/${resumeId}`);
       setResumes(resumes.filter(resume => resume._id !== resumeId));
-      alert('Resume deleted successfully!');
+      showSuccess('Resume deleted successfully!');
     } catch (err) {
-      alert('Failed to delete resume: ' + (err.response?.data?.error || err.message));
+      showError('Failed to delete resume: ' + (err.response?.data?.error || err.message));
     } finally {
       setDeletingResumeId(null);
     }
@@ -103,7 +104,7 @@ export default function Resumes() {
   if (error) return <div style={{ color: 'red' }}>{error}</div>;
 
   return (
-    <div style={{ maxWidth: 800, margin: '40px auto', padding: 24, background: '#fff', borderRadius: 8, boxShadow: '0 2px 8px #eee' }}>
+    <div style={{ padding: 24, background: '#fff', borderRadius: 8, boxShadow: '0 2px 8px #eee' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h2>My Resumes</h2>
         <button

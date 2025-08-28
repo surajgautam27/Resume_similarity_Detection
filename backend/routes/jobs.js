@@ -220,6 +220,63 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
+// Like a job
+router.post('/:id/like', auth, async (req, res) => {
+  try {
+    const job = await Job.findById(req.params.id);
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+
+    const userId = req.user.userId;
+    const alreadyLiked = (job.likes || []).some(id => id.toString() === userId);
+    if (alreadyLiked) {
+      // Unlike
+      job.likes = job.likes.filter(id => id.toString() !== userId);
+    } else {
+      job.likes = job.likes || [];
+      job.likes.push(userId);
+    }
+
+    await job.save();
+    const populated = await Job.findById(job._id).populate('createdBy', 'name email');
+    res.json({
+      message: alreadyLiked ? 'Unliked' : 'Liked',
+      likesCount: populated.likes?.length || 0,
+      job: populated
+    });
+  } catch (error) {
+    console.error('Like job error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Add a comment to a job
+router.post('/:id/comments', auth, [
+  body('text').trim().isLength({ min: 1, max: 500 }).withMessage('Comment must be 1-500 characters')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const job = await Job.findById(req.params.id);
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+
+    job.comments = job.comments || [];
+    job.comments.push({ user: req.user.userId, text: req.body.text });
+    await job.save();
+
+    const populated = await Job.findById(job._id)
+      .populate('createdBy', 'name email')
+      .populate('comments.user', 'name email');
+
+    res.status(201).json({ message: 'Comment added', comments: populated.comments });
+  } catch (error) {
+    console.error('Add comment error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Search jobs
 router.get('/search', auth, async (req, res) => {
   try {

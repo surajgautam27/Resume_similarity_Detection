@@ -29,6 +29,32 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  // Extended profile fields
+  profile: {
+    headline: { type: String, trim: true, maxlength: 140 },
+    bio: { type: String, trim: true, maxlength: 2000 },
+    education: [{
+      school: { type: String, trim: true },
+      degree: { type: String, trim: true },
+      field: { type: String, trim: true },
+      startYear: Number,
+      endYear: Number
+    }],
+    experience: [{
+      company: { type: String, trim: true },
+      role: { type: String, trim: true },
+      startDate: Date,
+      endDate: Date,
+      description: { type: String, trim: true, maxlength: 1000 }
+    }],
+    skills: { type: [String], default: [] },
+    social: {
+      website: { type: String, trim: true },
+      github: { type: String, trim: true },
+      linkedin: { type: String, trim: true },
+      twitter: { type: String, trim: true }
+    }
+  },
   isActive: {
     type: Boolean,
     default: true

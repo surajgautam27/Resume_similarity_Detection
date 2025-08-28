@@ -80,7 +80,7 @@ export default function Matching() {
   if (!user || user.role !== 'company') return <div>Unauthorized</div>;
 
   return (
-    <div style={{ maxWidth: 600, margin: '40px auto', padding: 24, background: '#fff', borderRadius: 8, boxShadow: '0 2px 8px #eee' }}>
+    <div style={{ padding: 24, background: '#fff', borderRadius: 8, boxShadow: '0 2px 8px #eee' }}>
       <h2>Compare Resumes to Your Job</h2>
       <form onSubmit={handleCompare}>
         <div style={{ marginBottom: 16 }}>
