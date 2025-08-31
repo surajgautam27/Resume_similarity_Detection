@@ -199,6 +199,36 @@ export default function Profile() {
   return (
     <div style={{ padding: 16 }}>
       <h2 style={{ marginBottom: 16 }}>Profile</h2>
+      
+      {/* Public Visibility Notice */}
+      <div style={{ 
+        marginBottom: '24px', 
+        padding: '16px', 
+        background: '#e8f5e8', 
+        borderRadius: '8px', 
+        border: '1px solid #4caf50'
+      }}>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '8px', 
+          marginBottom: '8px',
+          color: '#2e7d32',
+          fontWeight: '600'
+        }}>
+          <span style={{ fontSize: '18px' }}>🔓</span>
+          <span>Your profile is publicly visible to everyone in our community</span>
+        </div>
+        <p style={{ 
+          margin: '0', 
+          fontSize: '14px', 
+          color: '#388e3c',
+          opacity: 0.8 
+        }}>
+          This means all developers and companies can see your profile information. Keep this in mind when sharing personal details.
+        </p>
+      </div>
+      
       {/* Summary Card */}
       <div style={{ background: '#fff', border: '1px solid #dee2e6', borderRadius: 8, padding: 16, marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>

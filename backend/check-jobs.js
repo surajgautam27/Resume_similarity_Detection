@@ -3,7 +3,7 @@ const Job = require('./models/Job');
 
 async function checkJobs() {
   try {
-    await mongoose.connect('mongodb://localhost:27017/resume-matcher', {
+    await mongoose.connect('mongodb://localhost:27017/careerNexus', {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });

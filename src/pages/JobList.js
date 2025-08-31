@@ -165,6 +165,31 @@ export default function JobList() {
               <p><b>Location:</b> {job.location}</p>
               <p><b>Type:</b> {job.type}</p>
               <p><b>Company:</b> {job.company || (job.createdBy && job.createdBy.name)}</p>
+              
+              {/* Link to company profile */}
+              {job.createdBy?._id && (
+                <div style={{ marginBottom: '12px' }}>
+                  <a 
+                    href={`/profile/${job.createdBy._id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-block',
+                      padding: '6px 12px',
+                      background: '#f8f9fa',
+                      color: '#007bff',
+                      textDecoration: 'none',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      border: '1px solid #dee2e6',
+                      fontWeight: '500'
+                    }}
+                  >
+                    🏢 View Company Profile
+                  </a>
+                </div>
+              )}
+              
               <button onClick={() => handleShowApply(job._id)} style={{ padding: 8, background: '#1976d2', color: '#fff', border: 'none', borderRadius: 4, marginBottom: 8 }}>
                 {showApply[job._id] ? 'Cancel' : 'Apply'}
               </button>

@@ -39,7 +39,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(morgan('combined'));
 
 // MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/resume-matcher', {
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/careerNexus', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
@@ -57,7 +57,7 @@ app.use('/api/posts', postRoutes);
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'OK', 
-    message: 'Resume Matcher API is running',
+    message: 'careerNexus API is running',
     timestamp: new Date().toISOString()
   });
 });

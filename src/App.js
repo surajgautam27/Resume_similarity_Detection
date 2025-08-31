@@ -19,8 +19,11 @@ import Resumes from './pages/Resumes';
 import Matching from './pages/Matching';
 import Analytics from './pages/Analytics';
 import Profile from './pages/Profile';
+import PublicProfile from './pages/PublicProfile';
 import CompanyDashboard from './pages/CompanyDashboard';
 import Posts from './pages/Posts';
+import MyApplications from './pages/MyApplications';
+import Directory from './pages/Directory';
 
 // Create theme
 const theme = createTheme({
@@ -126,6 +129,16 @@ function App() {
                   } 
                 />
                 
+                {/* Public Profile Route (no authentication required) */}
+                <Route path="/profile/:userId" element={<PublicProfile />} />
+                
+                {/* Community Directory Route (no authentication required) */}
+                <Route path="/directory" element={
+                  <Layout>
+                    <Directory />
+                  </Layout>
+                } />
+                
                 {/* Protected Routes */}
                 <Route 
                   path="/" 
@@ -211,6 +224,16 @@ function App() {
                     <ProtectedRoute>
                       <Layout>
                         <CompanyDashboard />
+                      </Layout>
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/my-applications" 
+                  element={
+                    <ProtectedRoute>
+                      <Layout>
+                        <MyApplications />
                       </Layout>
                     </ProtectedRoute>
                   } 

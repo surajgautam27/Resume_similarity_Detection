@@ -9,7 +9,14 @@ export default function Layout({ children }) {
   const isActive = (path) => location.pathname === path;
 
   const getNavLinks = () => {
-    if (!user) return [];
+    if (!user) {
+      // Public navigation for non-authenticated users
+      return [
+        { path: '/directory', label: '👥 Directory' },
+        { path: '/login', label: 'Login' },
+        { path: '/register', label: 'Register' }
+      ];
+    }
 
     if (user.role === 'company') {
       return [
@@ -18,13 +25,18 @@ export default function Layout({ children }) {
         { path: '/jobs', label: 'Manage Jobs' },
         { path: '/matching', label: 'Matching' },
         { path: '/analytics', label: 'Analytics' },
+        { path: '/posts', label: 'Social Feed' },
+        { path: '/directory', label: '👥 Directory' },
         { path: '/profile', label: 'Profile' }
       ];
     } else if (user.role === 'developer') {
       return [
         { path: '/dashboard', label: 'Dashboard' },
         { path: '/jobs', label: 'Browse Jobs' },
+        { path: '/my-applications', label: 'My Applications' },
         { path: '/resumes', label: 'My Resumes' },
+        { path: '/posts', label: 'Social Feed' },
+        { path: '/directory', label: '👥 Directory' },
         { path: '/profile', label: 'Profile' }
       ];
     } else {
@@ -34,6 +46,8 @@ export default function Layout({ children }) {
         { path: '/resumes', label: 'Resumes' },
         { path: '/matching', label: 'Matching' },
         { path: '/analytics', label: 'Analytics' },
+        { path: '/posts', label: 'Social Feed' },
+        { path: '/directory', label: '👥 Directory' },
         { path: '/profile', label: 'Profile' }
       ];
     }
@@ -60,7 +74,7 @@ export default function Layout({ children }) {
             gap: '32px'
           }}>
             <div style={{ fontWeight: 600, fontSize: 22 }}>
-              Resume Matcher
+              careerNexus
             </div>
             <nav style={{ display: 'flex', gap: '16px' }}>
               {navLinks.map(link => (
@@ -101,6 +115,13 @@ export default function Layout({ children }) {
               >
                 Logout
               </button>
+            </div>
+          )}
+          {!user && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <span style={{ fontSize: '14px', color: '#e3f2fd' }}>
+                Welcome to careerNexus
+              </span>
             </div>
           )}
         </div>

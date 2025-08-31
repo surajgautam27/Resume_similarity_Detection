@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { showError } from '../utils/toast';
+import ApplicationCard from '../components/ApplicationCard';
 
 export default function CompanyDashboard() {
   const { user } = useAuth();
@@ -56,61 +57,16 @@ export default function CompanyDashboard() {
     return job.applications ? job.applications.length : 0;
   };
 
-  const getResumePreview = (resume, jobId) => {
-    if (!resume) return null;
-    
-    return (
-      <div style={{ 
-        background: '#f8f9fa', 
-        border: '1px solid #dee2e6', 
-        borderRadius: 8, 
-        padding: 16, 
-        marginBottom: 12 
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-          <div>
-            <h4 style={{ margin: '0 0 8px 0', color: '#495057' }}>
-              {resume.candidate?.name || resume.uploadedBy?.name || 'Unknown Candidate'}
-            </h4>
-            <p style={{ margin: '4px 0', color: '#6c757d', fontSize: '14px' }}>
-              <strong>Email:</strong> {resume.candidate?.email || resume.uploadedBy?.email || 'N/A'}
-            </p>
-            <p style={{ margin: '4px 0', color: '#6c757d', fontSize: '14px' }}>
-              <strong>Resume:</strong> {resume.originalName || resume.filename}
-            </p>
-            {resume.skills && resume.skills.length > 0 && (
-              <p style={{ margin: '4px 0', color: '#6c757d', fontSize: '14px' }}>
-                <strong>Skills:</strong> {resume.skills.join(', ')}
-              </p>
-            )}
-            {resume.experience && (
-              <p style={{ margin: '4px 0', color: '#6c757d', fontSize: '14px' }}>
-                <strong>Experience:</strong> {resume.experience} years
-              </p>
-            )}
-          </div>
-          <div style={{ textAlign: 'right', fontSize: '12px', color: '#6c757d' }}>
-            <div>Uploaded: {resume.createdAt ? new Date(resume.createdAt).toLocaleDateString() : 'N/A'}</div>
-            <div>By: {resume.uploadedBy?.name || 'Unknown'}</div>
-          </div>
-        </div>
-        
-        {sortedResumes[jobId] && (
-          <div style={{ 
-            background: '#e3f2fd', 
-            padding: 8, 
-            borderRadius: 4, 
-            marginTop: 8,
-            fontSize: '14px'
-          }}>
-            <strong>Similarity Score:</strong> {
-              sortedResumes[jobId].find(match => match.resume._id === resume._id)?.score 
-                ? ((sortedResumes[jobId].find(match => match.resume._id === resume._id).score * 100).toFixed(2) + '%')
-                : 'Not calculated'
-            }
-          </div>
-        )}
-      </div>
+  const handleApplicationUpdate = (jobId, applicationIndex, updatedApplication) => {
+    setJobs(prevJobs => 
+      prevJobs.map(job => {
+        if (job._id === jobId) {
+          const updatedApplications = [...job.applications];
+          updatedApplications[applicationIndex] = updatedApplication;
+          return { ...job, applications: updatedApplications };
+        }
+        return job;
+      })
     );
   };
 
@@ -254,10 +210,14 @@ export default function CompanyDashboard() {
                     ) : (
                       <div>
                         {job.applications && job.applications.length > 0 ? (
-                          job.applications.map((application, idx) => (
-                            <div key={application._id || idx}>
-                              {getResumePreview(application.resume, job._id)}
-                            </div>
+                          job.applications.map((application, index) => (
+                            <ApplicationCard
+                              key={`${job._id}-${index}`}
+                              application={application}
+                              jobId={job._id}
+                              applicationIndex={index}
+                              onUpdate={(updatedApplication) => handleApplicationUpdate(job._id, index, updatedApplication)}
+                            />
                           ))
                         ) : (
                           <div style={{ 

@@ -93,6 +93,115 @@ router.get('/profile', auth, async (req, res) => {
   }
 });
 
+// Get public profile (no authentication required)
+router.get('/public-profile/:userId', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Only return public information (exclude sensitive data)
+    const publicUser = {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      company: user.company,
+      profile: user.profile,
+      createdAt: user.createdAt,
+      // Exclude: password, isActive, lastLogin, etc.
+    };
+
+    res.json({ user: publicUser });
+  } catch (error) {
+    console.error('Public profile error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get community directory (no authentication required)
+router.get('/directory', async (req, res) => {
+  try {
+    console.log('Directory endpoint called');
+    
+    // Get ALL users without any filtering first
+    const allUsers = await User.find({})
+      .select('name email role company profile createdAt')
+      .sort({ createdAt: -1 });
+
+    console.log('Raw users found:', allUsers.length);
+    console.log('Sample users:', allUsers.slice(0, 3).map(u => ({
+      id: u._id,
+      name: u.name,
+      role: u.role,
+      email: u.email,
+      hasProfile: !!u.profile
+    })));
+
+    // Transform users to ensure all fields are present
+    const transformedUsers = allUsers.map(user => ({
+      _id: user._id,
+      name: user.name || 'Unknown User',
+      email: user.email,
+      role: user.role || 'developer',
+      company: user.company || '',
+      profile: {
+        headline: user.profile?.headline || '',
+        bio: user.profile?.bio || '',
+        skills: user.profile?.skills || [],
+        education: user.profile?.education || [],
+        experience: user.profile?.experience || [],
+        social: user.profile?.social || {}
+      },
+      createdAt: user.createdAt
+    }));
+
+    // Get basic statistics
+    const totalUsers = allUsers.length;
+    const totalDevelopers = allUsers.filter(u => u.role === 'developer').length;
+    const totalCompanies = allUsers.filter(u => u.role === 'company').length;
+
+    console.log('Final stats:', { totalUsers, totalDevelopers, totalCompanies, showing: transformedUsers.length });
+
+    res.json({ 
+      users: transformedUsers,
+      stats: {
+        total: totalUsers,
+        developers: totalDevelopers,
+        companies: totalCompanies,
+        showing: transformedUsers.length
+      }
+    });
+  } catch (error) {
+    console.error('Directory error:', error);
+    res.status(500).json({ error: 'Server error: ' + error.message });
+  }
+});
+
+// Debug endpoint to check all users in database
+router.get('/debug/users', async (req, res) => {
+  try {
+    const allUsers = await User.find({}).select('name email role company profile createdAt');
+    res.json({ 
+      totalUsers: allUsers.length,
+      users: allUsers.map(u => ({
+        id: u._id,
+        name: u.name,
+        role: u.role,
+        email: u.email,
+        company: u.company,
+        hasProfile: !!u.profile,
+        profileKeys: u.profile ? Object.keys(u.profile) : [],
+        createdAt: u.createdAt
+      }))
+    });
+  } catch (error) {
+    console.error('Debug users error:', error);
+    res.status(500).json({ error: 'Debug error: ' + error.message });
+  }
+});
+
 // Update user profile
 router.put('/profile', auth, [
   body('name').optional().trim().isLength({ min: 2 }).withMessage('Name must be at least 2 characters'),

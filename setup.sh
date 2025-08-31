@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🚀 Setting up Resume Matcher Application..."
+echo "🚀 Setting up careerNexus Application..."
 
 # Check if Node.js is installed
 if ! command -v node &> /dev/null; then
@@ -31,7 +31,7 @@ if [ ! -f "backend/.env" ]; then
     echo "🔧 Creating .env file..."
     cat > backend/.env << EOF
 # MongoDB Configuration
-MONGODB_URI=mongodb://localhost:27017/resume-matcher
+MONGODB_URI=mongodb://localhost:27017/careerNexus
 
 # JWT Secret
 JWT_SECRET=your-super-secret-jwt-key-change-this-in-production

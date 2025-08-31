@@ -98,6 +98,36 @@ const Dashboard = () => {
         </Typography>
       </Box>
 
+      {/* Community Directory Section */}
+      <Box sx={{ mb: 4 }}>
+        <Card sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
+          <CardContent sx={{ textAlign: 'center', py: 4 }}>
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold' }}>
+              👥 Discover Our Community
+            </Typography>
+            <Typography variant="body1" sx={{ mb: 3, opacity: 0.9 }}>
+              Connect with {user?.role === 'company' ? 'talented developers' : 'great companies'} in our community directory
+            </Typography>
+            <Button
+              variant="contained"
+              size="large"
+              onClick={() => navigate('/directory')}
+              sx={{
+                background: 'rgba(255,255,255,0.2)',
+                color: 'white',
+                border: '1px solid rgba(255,255,255,0.3)',
+                '&:hover': {
+                  background: 'rgba(255,255,255,0.3)',
+                  border: '1px solid rgba(255,255,255,0.5)'
+                }
+              }}
+            >
+              Explore Directory
+            </Button>
+          </CardContent>
+        </Card>
+      </Box>
+
       {/* Stats Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         {stats.map((stat, index) => (

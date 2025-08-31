@@ -98,7 +98,7 @@ const Login = () => {
           }}
         >
           <Typography component="h1" variant="h4" color="primary" gutterBottom>
-            Resume Matcher
+            careerNexus
           </Typography>
           <Typography component="h2" variant="h5" gutterBottom>
             Sign In

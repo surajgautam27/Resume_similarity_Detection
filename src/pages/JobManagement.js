@@ -11,8 +11,6 @@ export default function JobManagement() {
   const [error, setError] = useState('');
   const [showPostForm, setShowPostForm] = useState(false);
   const [deletingJobId, setDeletingJobId] = useState(null);
-  const [expandedComments, setExpandedComments] = useState({});
-  const [commentInputs, setCommentInputs] = useState({});
 
   useEffect(() => {
     fetchJobs();
@@ -53,37 +51,6 @@ export default function JobManagement() {
   const handleJobPosted = () => {
     setShowPostForm(false);
     fetchJobs(); // Refresh the job list
-  };
-
-  const handleToggleLike = async (jobId) => {
-    try {
-      const res = await axios.post(`/api/jobs/${jobId}/like`);
-      const updated = res.data.job;
-      setJobs(prev => prev.map(j => j._id === jobId ? { ...j, ...updated } : j));
-    } catch (err) {
-      showError('Failed to update like: ' + (err.response?.data?.error || err.message));
-    }
-  };
-
-  const handleToggleComments = (jobId) => {
-    setExpandedComments(prev => ({ ...prev, [jobId]: !prev[jobId] }));
-  };
-
-  const handleCommentChange = (jobId, value) => {
-    setCommentInputs(prev => ({ ...prev, [jobId]: value }));
-  };
-
-  const handleSubmitComment = async (jobId) => {
-    const text = (commentInputs[jobId] || '').trim();
-    if (!text) return;
-    try {
-      const res = await axios.post(`/api/jobs/${jobId}/comments`, { text });
-      const comments = res.data.comments || [];
-      setJobs(prev => prev.map(j => j._id === jobId ? { ...j, comments } : j));
-      setCommentInputs(prev => ({ ...prev, [jobId]: '' }));
-    } catch (err) {
-      showError('Failed to add comment: ' + (err.response?.data?.error || err.message));
-    }
   };
 
   if (loading) return <div>Loading jobs...</div>;
@@ -148,36 +115,32 @@ export default function JobManagement() {
                     <p style={{ margin: '8px 0 0 0', color: '#495057', fontSize: '14px' }}>
                       {job.description.length > 150 ? job.description.substring(0, 150) + '...' : job.description}
                     </p>
+                    
+                    {/* Link to company profile */}
+                    {job.createdBy?._id && (
+                      <div style={{ marginTop: '8px' }}>
+                        <a 
+                          href={`/profile/${job.createdBy._id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: 'inline-block',
+                            padding: '6px 12px',
+                            background: '#f8f9fa',
+                            color: '#007bff',
+                            textDecoration: 'none',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            border: '1px solid #dee2e6',
+                            fontWeight: '500'
+                          }}
+                        >
+                          🏢 View Company Profile
+                        </a>
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginLeft: 16 }}>
-                    <button
-                      onClick={() => handleToggleLike(job._id)}
-                      style={{
-                        padding: '6px 12px',
-                        background: '#0d6efd',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: 4,
-                        cursor: 'pointer',
-                        fontSize: '12px'
-                      }}
-                    >
-                      Like ({job.likes ? job.likes.length : 0})
-                    </button>
-                    <button
-                      onClick={() => handleToggleComments(job._id)}
-                      style={{
-                        padding: '6px 12px',
-                        background: '#6f42c1',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: 4,
-                        cursor: 'pointer',
-                        fontSize: '12px'
-                      }}
-                    >
-                      Comments ({job.comments ? job.comments.length : 0})
-                    </button>
                     <button
                       onClick={() => handleDeleteJob(job._id)}
                       disabled={deletingJobId === job._id}
@@ -195,43 +158,6 @@ export default function JobManagement() {
                     </button>
                   </div>
                 </div>
-                {expandedComments[job._id] && (
-                  <div style={{ marginTop: 12 }}>
-                    <div style={{
-                      borderTop: '1px solid #eee',
-                      paddingTop: 12
-                    }}>
-                      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                        <input
-                          type="text"
-                          value={commentInputs[job._id] || ''}
-                          onChange={(e) => handleCommentChange(job._id, e.target.value)}
-                          placeholder="Write a comment..."
-                          style={{ flex: 1, padding: '8px 10px', border: '1px solid #dee2e6', borderRadius: 4 }}
-                        />
-                        <button
-                          onClick={() => handleSubmitComment(job._id)}
-                          style={{ padding: '8px 12px', background: '#28a745', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}
-                        >
-                          Post
-                        </button>
-                      </div>
-                      <div style={{ display: 'grid', gap: 8 }}>
-                        {(job.comments || []).slice().reverse().map((c, idx) => (
-                          <div key={idx} style={{ background: '#f8f9fa', border: '1px solid #eee', borderRadius: 6, padding: 10 }}>
-                            <div style={{ fontSize: 12, color: '#6c757d', marginBottom: 4 }}>
-                              {c.user?.name || 'User'} • {c.createdAt ? new Date(c.createdAt).toLocaleString() : ''}
-                            </div>
-                            <div style={{ fontSize: 14, color: '#343a40' }}>{c.text}</div>
-                          </div>
-                        ))}
-                        {(!job.comments || job.comments.length === 0) && (
-                          <div style={{ fontSize: 13, color: '#6c757d' }}>No comments yet.</div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             ))}
           </div>

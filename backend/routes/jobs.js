@@ -25,6 +25,8 @@ router.get('/', auth, async (req, res) => {
       .populate('createdBy', 'name email')
       .populate('applications.user', 'name email')
       .populate('applications.resume')
+      .populate('applications.likes', 'name email')
+      .populate('applications.comments.user', 'name email')
       .sort(sortOptions)
       .limit(limit * 1)
       .skip((page - 1) * limit)
@@ -77,7 +79,9 @@ router.get('/:id', auth, async (req, res) => {
     let job = await Job.findById(req.params.id)
       .populate('createdBy', 'name email')
       .populate('applications.user', 'name email')
-      .populate('applications.resume');
+      .populate('applications.resume')
+      .populate('applications.likes', 'name email')
+      .populate('applications.comments.user', 'name email');
     
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });
@@ -216,63 +220,6 @@ router.delete('/:id', auth, async (req, res) => {
     res.json({ message: 'Job deleted successfully' });
   } catch (error) {
     console.error('Delete job error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Like a job
-router.post('/:id/like', auth, async (req, res) => {
-  try {
-    const job = await Job.findById(req.params.id);
-    if (!job) return res.status(404).json({ error: 'Job not found' });
-
-    const userId = req.user.userId;
-    const alreadyLiked = (job.likes || []).some(id => id.toString() === userId);
-    if (alreadyLiked) {
-      // Unlike
-      job.likes = job.likes.filter(id => id.toString() !== userId);
-    } else {
-      job.likes = job.likes || [];
-      job.likes.push(userId);
-    }
-
-    await job.save();
-    const populated = await Job.findById(job._id).populate('createdBy', 'name email');
-    res.json({
-      message: alreadyLiked ? 'Unliked' : 'Liked',
-      likesCount: populated.likes?.length || 0,
-      job: populated
-    });
-  } catch (error) {
-    console.error('Like job error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Add a comment to a job
-router.post('/:id/comments', auth, [
-  body('text').trim().isLength({ min: 1, max: 500 }).withMessage('Comment must be 1-500 characters')
-], async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const job = await Job.findById(req.params.id);
-    if (!job) return res.status(404).json({ error: 'Job not found' });
-
-    job.comments = job.comments || [];
-    job.comments.push({ user: req.user.userId, text: req.body.text });
-    await job.save();
-
-    const populated = await Job.findById(job._id)
-      .populate('createdBy', 'name email')
-      .populate('comments.user', 'name email');
-
-    res.status(201).json({ message: 'Comment added', comments: populated.comments });
-  } catch (error) {
-    console.error('Add comment error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -494,6 +441,187 @@ router.get('/:id/match-resumes', auth, async (req, res) => {
     res.json({ matches: similarities });
   } catch (error) {
     console.error('Match resumes error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Like/unlike an application
+router.post('/:jobId/applications/:applicationIndex/like', auth, async (req, res) => {
+  try {
+    const { jobId, applicationIndex } = req.params;
+    const userId = req.user.userId;
+
+    const job = await Job.findById(jobId);
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    const application = job.applications[applicationIndex];
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Check if user has permission to like this application
+    if (req.user.role === 'developer') {
+      // Developers can only like applications they submitted
+      if (application.user.toString() !== userId) {
+        return res.status(403).json({ error: 'You can only like your own applications' });
+      }
+    } else if (req.user.role === 'company') {
+      // Companies can only like applications for jobs they created
+      if (job.createdBy.toString() !== userId) {
+        return res.status(403).json({ error: 'You can only like applications for your own jobs' });
+      }
+    }
+
+    // Initialize likes array if it doesn't exist
+    if (!application.likes) {
+      application.likes = [];
+    }
+
+    const liked = application.likes.some(id => id.toString() === userId);
+    
+    if (liked) {
+      // Unlike
+      application.likes = application.likes.filter(id => id.toString() !== userId);
+    } else {
+      // Like
+      application.likes.push(userId);
+    }
+
+    await job.save();
+
+    // Populate user info for response
+    await job.populate('applications.user', 'name email');
+    await job.populate('applications.likes', 'name email');
+
+    res.json({ 
+      application: job.applications[applicationIndex],
+      likesCount: job.applications[applicationIndex].likes.length,
+      message: liked ? 'Application unliked' : 'Application liked'
+    });
+  } catch (error) {
+    console.error('Like application error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Add comment to an application
+router.post('/:jobId/applications/:applicationIndex/comments', auth, [
+  body('text').trim().isLength({ min: 1, max: 500 }).withMessage('Comment must be 1-500 characters')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { jobId, applicationIndex } = req.params;
+    const userId = req.user.userId;
+    const { text } = req.body;
+
+    const job = await Job.findById(jobId);
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    const application = job.applications[applicationIndex];
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Check if user has permission to comment on this application
+    if (req.user.role === 'developer') {
+      // Developers can only comment on applications they submitted
+      if (application.user.toString() !== userId) {
+        return res.status(403).json({ error: 'You can only comment on your own applications' });
+      }
+    } else if (req.user.role === 'company') {
+      // Companies can only comment on applications for jobs they created
+      if (job.createdBy.toString() !== userId) {
+        return res.status(403).json({ error: 'You can only comment on applications for your own jobs' });
+      }
+    }
+
+    // Initialize comments array if it doesn't exist
+    if (!application.comments) {
+      application.comments = [];
+    }
+
+    // Add the comment
+    application.comments.push({
+      user: userId,
+      text: text,
+      createdAt: new Date()
+    });
+
+    await job.save();
+
+    // Populate user info for response
+    await job.populate('applications.user', 'name email');
+    await job.populate('applications.comments.user', 'name email');
+
+    res.status(201).json({ 
+      application: job.applications[applicationIndex],
+      comments: job.applications[applicationIndex].comments
+    });
+  } catch (error) {
+    console.error('Add application comment error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update application status (for companies)
+router.patch('/:jobId/applications/:applicationIndex/status', auth, [
+  body('status').isIn(['pending', 'reviewed', 'shortlisted', 'rejected', 'hired']).withMessage('Invalid status'),
+  body('notes').optional().trim().isLength({ max: 1000 }).withMessage('Notes cannot exceed 1000 characters')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { jobId, applicationIndex } = req.params;
+    const { status, notes } = req.body;
+
+    // Only companies can update application status
+    if (req.user.role !== 'company') {
+      return res.status(403).json({ error: 'Only companies can update application status' });
+    }
+
+    const job = await Job.findById(jobId);
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    // Check if this job was created by the current company
+    if (job.createdBy.toString() !== req.user.userId) {
+      return res.status(403).json({ error: 'You can only update applications for your own jobs' });
+    }
+
+    const application = job.applications[applicationIndex];
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Update status and notes
+    application.status = status;
+    if (notes !== undefined) {
+      application.notes = notes;
+    }
+
+    await job.save();
+
+    // Populate user info for response
+    await job.populate('applications.user', 'name email');
+
+    res.json({ 
+      application: job.applications[applicationIndex],
+      message: 'Application status updated successfully'
+    });
+  } catch (error) {
+    console.error('Update application status error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

@@ -69,29 +69,6 @@ const jobSchema = new mongoose.Schema({
     enum: ['low', 'medium', 'high', 'urgent'],
     default: 'medium'
   },
-  // Users who liked this job
-  likes: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  }],
-  // Comments on this job
-  comments: [{
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
-    },
-    text: {
-      type: String,
-      required: true,
-      trim: true,
-      maxlength: 500
-    },
-    createdAt: {
-      type: Date,
-      default: Date.now
-    }
-  }],
   applications: [{
     user: {
       type: mongoose.Schema.Types.ObjectId,
@@ -104,6 +81,38 @@ const jobSchema = new mongoose.Schema({
     appliedAt: {
       type: Date,
       default: Date.now
+    },
+    // Social features for applications
+    likes: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }],
+    comments: [{
+      user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+      },
+      text: {
+        type: String,
+        required: true,
+        trim: true,
+        maxlength: [500, 'Comment cannot be more than 500 characters']
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now
+      }
+    }],
+    status: {
+      type: String,
+      enum: ['pending', 'reviewed', 'shortlisted', 'rejected', 'hired'],
+      default: 'pending'
+    },
+    notes: {
+      type: String,
+      trim: true,
+      maxlength: 1000
     }
   }]
 }, {
