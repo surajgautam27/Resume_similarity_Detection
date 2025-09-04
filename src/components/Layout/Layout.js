@@ -126,9 +126,9 @@ export default function Layout({ children }) {
           )}
         </div>
       </header>
-      <div style={{ maxWidth: 1200, margin: '24px auto', padding: '0 16px' }}>
-        {children}
-      </div>
+      <div style={{ width: '100%', margin: 0, padding: '0 16px' }}>
+  {children}
+</div>
     </div>
   );
 } 

@@ -78,7 +78,8 @@ export default function Posts() {
   if (error) return <div style={{ color: 'red' }}>{error}</div>;
 
   return (
-    <div style={{ maxWidth: 700, margin: '30px auto', padding: 16 }}>
+    <div style={{ width: '100%', maxWidth: '1200px', margin: '30px auto', padding: 16 }}>
+
       <h2 style={{ marginBottom: 16 }}>Feed</h2>
       
       {/* Directory Link */}

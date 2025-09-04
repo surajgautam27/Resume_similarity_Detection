@@ -1,7 +1,19 @@
 import React, { useState } from 'react';
+import {
+  Box,
+  Paper,
+  TextField,
+  Button,
+  Typography,
+  Container,
+  CircularProgress,
+  MenuItem,
+  Alert,
+} from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL } from '../utils/Api';
+
 export default function Register() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'developer' });
@@ -32,59 +44,97 @@ export default function Register() {
   };
 
   return (
-    <div style={{ maxWidth: 400, margin: '40px auto', padding: 24, background: '#fff', borderRadius: 8, boxShadow: '0 2px 8px #eee' }}>
-      <h2>Register</h2>
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: 16 }}>
-          <label>Name</label>
-          <input
-            type="text"
-            name="name"
-            value={form.name}
-            onChange={handleChange}
-            required
-            style={{ width: '100%', padding: 8, marginTop: 4 }}
-          />
-        </div>
-        <div style={{ marginBottom: 16 }}>
-          <label>Email</label>
-          <input
-            type="email"
-            name="email"
-            value={form.email}
-            onChange={handleChange}
-            required
-            style={{ width: '100%', padding: 8, marginTop: 4 }}
-          />
-        </div>
-        <div style={{ marginBottom: 16 }}>
-          <label>Password</label>
-          <input
-            type="password"
-            name="password"
-            value={form.password}
-            onChange={handleChange}
-            required
-            style={{ width: '100%', padding: 8, marginTop: 4 }}
-          />
-        </div>
-        <div style={{ marginBottom: 16 }}>
-          <label>Role</label>
-          <select
-            name="role"
-            value={form.role}
-            onChange={handleChange}
-            style={{ width: '100%', padding: 8, marginTop: 4 }}
-          >
-            <option value="developer">Developer</option>
-            <option value="company">Company</option>
-          </select>
-        </div>
-        {error && <div style={{ color: 'red', marginBottom: 12 }}>{error}</div>}
-        <button type="submit" disabled={loading} style={{ width: '100%', padding: 10, background: '#1976d2', color: '#fff', border: 'none', borderRadius: 4 }}>
-          {loading ? 'Registering...' : 'Register'}
-        </button>
-      </form>
-    </div>
+    <Container component="main" maxWidth="xs">
+      <Box
+        sx={{
+          marginTop: 8,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+        }}
+      >
+        <Paper
+          elevation={3}
+          sx={{
+            padding: 4,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            width: '100%',
+          }}
+        >
+          <Typography component="h1" variant="h4" color="primary" gutterBottom>
+            careerNexus
+          </Typography>
+          <Typography component="h2" variant="h5" gutterBottom>
+            Create Account
+          </Typography>
+
+          {error && (
+            <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1, width: '100%' }}>
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              id="name"
+              label="Name"
+              name="name"
+              value={form.name}
+              onChange={handleChange}
+            />
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              id="email"
+              label="Email Address"
+              name="email"
+              type="email"
+              value={form.email}
+              onChange={handleChange}
+            />
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              name="password"
+              label="Password"
+              type="password"
+              id="password"
+              value={form.password}
+              onChange={handleChange}
+            />
+            <TextField
+              margin="normal"
+              select
+              fullWidth
+              id="role"
+              name="role"
+              label="Role"
+              value={form.role}
+              onChange={handleChange}
+            >
+              <MenuItem value="developer">Developer</MenuItem>
+              <MenuItem value="company">Company</MenuItem>
+            </TextField>
+
+            <Button
+              type="submit"
+              fullWidth
+              variant="contained"
+              sx={{ mt: 3, mb: 2 }}
+              disabled={loading}
+            >
+              {loading ? <CircularProgress size={24} /> : 'Register'}
+            </Button>
+          </Box>
+        </Paper>
+      </Box>
+    </Container>
   );
 }

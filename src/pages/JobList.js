@@ -153,7 +153,17 @@ export default function JobList() {
   if (error) return <div style={{ color: 'red' }}>{error}</div>;
 
   return (
-    <div style={{ maxWidth: 700, margin: '40px auto', padding: 24, background: '#fff', borderRadius: 8, boxShadow: '0 2px 8px #eee' }}>
+    <div
+    style={{
+      width: '80%',
+      maxWidth: '1200px',
+      margin: '40px auto',
+      padding: 24,
+      background: '#fff',
+      borderRadius: 8,
+      boxShadow: '0 2px 8px #eee',
+    }}
+  >
       <h2>Available Jobs</h2>
       {jobs.length === 0 ? (
         <div>No jobs available.</div>
