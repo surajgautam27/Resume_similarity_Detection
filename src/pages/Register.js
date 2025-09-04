@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-
+import { API_URL } from '../utils/Api';
 export default function Register() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'developer' });
@@ -17,7 +17,7 @@ export default function Register() {
     setLoading(true);
     setError('');
     try {
-      const res = await axios.post('/api/auth/register', form);
+      const res = await axios.post(`${API_URL}/auth/register`, form);
       localStorage.setItem('token', res.data.token);
       navigate('/dashboard');
     } catch (err) {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import { API_URL } from '../utils/Api';
 import { useAuth } from '../contexts/AuthContext';
 import { showSuccess, showError } from '../utils/toast';
 
@@ -21,7 +22,7 @@ export default function Resumes() {
   const fetchResumes = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('/api/resumes');
+      const res = await axios.get(`${API_URL}/resumes`);
       const myResumes = (res.data.resumes || []).filter(
         r => r.uploadedBy && (r.uploadedBy._id === user._id)
       );
@@ -49,7 +50,7 @@ export default function Resumes() {
     formData.append('resume', file);
     
     try {
-      const res = await axios.post('/api/resumes/upload', formData, {
+      const res = await axios.post(`${API_URL}/resumes/upload`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (progressEvent) => {
           const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -90,7 +91,7 @@ export default function Resumes() {
 
     setDeletingResumeId(resumeId);
     try {
-      await axios.delete(`/api/resumes/${resumeId}`);
+      await axios.delete(`${API_URL}/resumes/${resumeId}`);
       setResumes(resumes.filter(resume => resume._id !== resumeId));
       showSuccess('Resume deleted successfully!');
     } catch (err) {

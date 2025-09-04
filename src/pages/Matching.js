@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { API_URL } from '../utils/Api';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Matching() {
@@ -17,7 +18,7 @@ export default function Matching() {
     // Fetch jobs
     const fetchJobs = async () => {
       try {
-        const jobsRes = await axios.get('/api/jobs');
+        const jobsRes = await axios.get(`${API_URL}/jobs`);
         // Only jobs created by the current company user
         const myJobs = (jobsRes.data.jobs || []).filter(
           job => job.createdBy && (job.createdBy._id === user._id)
@@ -39,7 +40,7 @@ export default function Matching() {
     }
     const fetchAppliedResumes = async () => {
       try {
-        const jobRes = await axios.get(`/api/jobs/${selectedJobId}`);
+        const jobRes = await axios.get(`${API_URL}/jobs/${selectedJobId}`);
         const job = jobRes.data.job;
         // Get resumes from applications
         const resumes = (job.applications || [])
@@ -62,7 +63,7 @@ export default function Matching() {
     try {
       const selectedJob = jobs.find(j => j._id === selectedJobId);
       if (!selectedJob) throw new Error('No job selected');
-      const res = await axios.post(`/api/matching/adhoc`, {
+      const res = await axios.post(`${API_URL}/matching/adhoc`, {
         job: {
           title: selectedJob.title,
           description: selectedJob.description

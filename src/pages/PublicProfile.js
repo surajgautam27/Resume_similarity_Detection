@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from 'axios';
+import { API_URL } from '../utils/Api';
 import { showError } from '../utils/toast';
 
 export default function PublicProfile() {
@@ -13,7 +14,7 @@ export default function PublicProfile() {
     const fetchPublicProfile = async () => {
       setLoading(true);
       try {
-        const res = await axios.get(`/api/auth/public-profile/${userId}`);
+        const res = await axios.get(`${API_URL}/auth/public-profile/${userId}`);
         setProfile(res.data.user);
       } catch (err) {
         setError('Failed to load profile or profile not found');

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { API_URL } from '../utils/Api';
 import { showError } from '../utils/toast';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -14,7 +15,7 @@ export default function Posts() {
   const fetchPosts = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('/api/posts');
+      const res = await axios.get(`${API_URL}/posts`);
       setPosts(res.data.posts || []);
     } catch (err) {
       setError('Failed to load posts');
@@ -42,7 +43,7 @@ export default function Posts() {
 
   const handleToggleLike = async (postId) => {
     try {
-      const res = await axios.post(`/api/posts/${postId}/like`);
+      const res = await axios.post(`${API_URL}/posts/${postId}/like`);
       const updated = res.data.post;
       setPosts(prev => prev.map(p => p._id === postId ? { ...p, ...updated } : p));
     } catch (err) {
@@ -58,7 +59,7 @@ export default function Posts() {
     const text = (commentInputs[postId] || '').trim();
     if (!text) return;
     try {
-      const res = await axios.post(`/api/posts/${postId}/comments`, { text });
+      const res = await axios.post(`${API_URL}/posts/${postId}/comments`, { text });
       const comments = res.data.comments || [];
       setPosts(prev => prev.map(p => p._id === postId ? { ...p, comments } : p));
       setCommentInputs(prev => ({ ...prev, [postId]: '' }));

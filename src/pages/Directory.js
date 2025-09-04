@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
+import { API_URL } from '../utils/Api';
 import { showError } from '../utils/toast';
 
 export default function Directory() {
@@ -19,7 +20,7 @@ export default function Directory() {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('/api/auth/directory');
+      const res = await axios.get(`${API_URL}/auth/directory`);
       setUsers(res.data.users || []);
     } catch (err) {
       setError('Failed to load directory');

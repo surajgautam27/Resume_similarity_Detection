@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { API_URL } from '../utils/Api';
 import { showSuccess, showError } from '../utils/toast';
 import { useAuth } from '../contexts/AuthContext';
 import JobPostForm from './JobPostForm';
@@ -19,7 +20,7 @@ export default function JobManagement() {
   const fetchJobs = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('/api/jobs');
+      const res = await axios.get(`${API_URL}/jobs`);
       const myJobs = (res.data.jobs || []).filter(
         job => job.createdBy && (job.createdBy._id === user._id)
       );
@@ -38,7 +39,7 @@ export default function JobManagement() {
 
     setDeletingJobId(jobId);
     try {
-      await axios.delete(`/api/jobs/${jobId}`);
+      await axios.delete(`${API_URL}/jobs/${jobId}`);
       setJobs(jobs.filter(job => job._id !== jobId));
       showSuccess('Job deleted successfully!');
     } catch (err) {

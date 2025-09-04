@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { API_URL } from '../utils/Api';
 import { showError } from '../utils/toast';
 import { useAuth } from '../contexts/AuthContext';
 import ApplicationCard from '../components/ApplicationCard';
@@ -14,7 +15,7 @@ export default function MyApplications() {
     const fetchMyApplications = async () => {
       setLoading(true);
       try {
-        const res = await axios.get('/api/jobs');
+        const res = await axios.get(`${API_URL}/jobs`);
         // Filter jobs where the current user has applied
         const jobsWithMyApplications = res.data.jobs.filter(job => 
           job.applications?.some(app => 

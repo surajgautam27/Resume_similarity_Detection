@@ -21,6 +21,7 @@ import {
 import { useQuery } from 'react-query';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { API_URL } from '../utils/Api';
 import { useAuth } from '../contexts/AuthContext';
 
 const Dashboard = () => {
@@ -30,9 +31,9 @@ const Dashboard = () => {
   // Fetch dashboard data
   const { data: dashboardData, isLoading } = useQuery('dashboard', async () => {
     const [jobsRes, resumesRes, matchesRes] = await Promise.all([
-      axios.get('/api/jobs'),
-      axios.get('/api/resumes'),
-      axios.get('/api/matching/analytics')
+      axios.get(`${API_URL}/jobs`),
+      axios.get(`${API_URL}/resumes`),
+      axios.get(`${API_URL}/matching/analytics`)
     ]);
 
     return {

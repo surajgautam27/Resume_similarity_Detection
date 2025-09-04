@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
+import { API_URL } from '../utils/Api';
 import { useAuth } from '../contexts/AuthContext';
 import { showSuccess } from '../utils/toast';
 
@@ -18,8 +19,8 @@ export default function JobList() {
       setLoading(true);
       try {
         const [jobsRes, resumesRes] = await Promise.all([
-          axios.get('/api/jobs'),
-          axios.get('/api/resumes')
+          axios.get(`${API_URL}/jobs`),
+          axios.get(`${API_URL}/resumes`)
         ]);
         setJobs(jobsRes.data.jobs || []);
         // Only resumes uploaded by the current user
@@ -73,7 +74,7 @@ export default function JobList() {
       [jobId]: { ...prev[jobId], applying: true, error: '', success: '', uploading: false, uploadError: '', uploadProgress: 0 }
     }));
     try {
-      await axios.post(`/api/jobs/${jobId}/apply`, { resumeId });
+      await axios.post(`${API_URL}/jobs/${jobId}/apply`, { resumeId });
       setApplyState(prev => ({
         ...prev,
         [jobId]: { ...prev[jobId], applying: false, success: 'Applied successfully!', error: '', uploading: false, uploadError: '', uploadProgress: 0 }
@@ -96,7 +97,7 @@ export default function JobList() {
     const formData = new FormData();
     formData.append('resume', file);
     try {
-      const res = await axios.post('/api/resumes/upload', formData, {
+      const res = await axios.post(`${API_URL}/resumes/upload`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (progressEvent) => {
           const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);

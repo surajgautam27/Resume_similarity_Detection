@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { showSuccess, showError } from '../utils/toast';
-
+import { API_URL } from '../utils/Api';
 export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -24,7 +24,7 @@ export default function Profile() {
   const fetchProfile = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('/api/auth/profile');
+      const res = await axios.get(`${API_URL}/auth/profile`);
       const u = res.data.user || {};
       setSavedProfile(u);
       setForm({
@@ -171,7 +171,7 @@ export default function Profile() {
           experience: form.profile.experience
         }
       };
-      await axios.put('/api/auth/profile', payload);
+      await axios.put(`${API_URL}/auth/profile`, payload);
       showSuccess('Profile updated successfully!');
       // Clear form after save, but keep summary showing saved data
       setSavedProfile(prev => ({ ...prev, ...payload, profile: { ...prev?.profile, ...payload.profile } }));

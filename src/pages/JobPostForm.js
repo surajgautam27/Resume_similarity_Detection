@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-
+import { API_URL } from '../utils/Api';
 export default function JobPostForm({ onJobPosted }) {
   const [form, setForm] = useState({
     title: '',
@@ -36,7 +36,7 @@ export default function JobPostForm({ onJobPosted }) {
           ? form.skills.split(',').map(s => s.trim()).filter(Boolean)
           : [],
       };
-      await axios.post('/api/jobs', payload);
+      await axios.post(`${API_URL}/jobs`, payload);
       setSuccess('Job posted successfully!');
       setForm({
         title: '',

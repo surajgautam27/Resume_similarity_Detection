@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { API_URL } from '../utils/Api';
 import { useAuth } from '../contexts/AuthContext';
 import { showError } from '../utils/toast';
 import ApplicationCard from '../components/ApplicationCard';
@@ -17,7 +18,7 @@ export default function CompanyDashboard() {
     const fetchJobs = async () => {
       setLoading(true);
       try {
-        const res = await axios.get('/api/jobs');
+        const res = await axios.get(`${API_URL}/jobs`);
         const myJobs = (res.data.jobs || []).filter(
           job => job.createdBy && (job.createdBy._id === user._id)
         );
@@ -35,7 +36,7 @@ export default function CompanyDashboard() {
     setSortingJobId(jobId);
     try {
       console.log('Fetching matches for job:', jobId);
-      const res = await axios.get(`/api/jobs/${jobId}/match-resumes`);
+      const res = await axios.get(`${API_URL}/jobs/${jobId}/match-resumes`);
       console.log('Match response:', res.data);
       setSortedResumes(prev => ({ ...prev, [jobId]: res.data.matches }));
     } catch (err) {
