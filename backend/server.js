@@ -22,23 +22,28 @@ const resumeRoutes = require('./routes/resumes');
 const matchingRoutes = require('./routes/matching');
 const postRoutes = require('./routes/posts');
 
+// ✅ CORS FIRST (before helmet & limiter)
+app.use(cors({
+  origin: 'http://localhost:3000', // Frontend URL
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+
+// ✅ Explicitly handle preflight
+app.options('*', cors());
+
 // Security middleware
 app.use(helmet());
 
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  max: 100
 });
 app.use(limiter);
 
 // Middleware
-app.use(cors({
-  origin: 'http://localhost:3000', // Frontend URL
-  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true // if sending cookies or auth headers
-}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(morgan('combined'));
@@ -84,4 +89,4 @@ app.use('*', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-}); 
+});
