@@ -15,13 +15,11 @@ export default function Matching() {
 
   useEffect(() => {
     if (!user || user.role !== 'company') return;
-    // Fetch jobs
     const fetchJobs = async () => {
       try {
         const jobsRes = await axios.get(`${API_URL}/jobs`);
-        // Only jobs created by the current company user
         const myJobs = (jobsRes.data.jobs || []).filter(
-          job => job.createdBy && (job.createdBy._id === user._id)
+          job => job.createdBy && job.createdBy._id === user._id
         );
         setJobs(myJobs);
       } catch (err) {
@@ -31,7 +29,6 @@ export default function Matching() {
     fetchJobs();
   }, [user]);
 
-  // Fetch resumes applied to the selected job
   useEffect(() => {
     if (!selectedJobId) {
       setAppliedResumes([]);
@@ -42,12 +39,11 @@ export default function Matching() {
       try {
         const jobRes = await axios.get(`${API_URL}/jobs/${selectedJobId}`);
         const job = jobRes.data.job;
-        // Get resumes from applications
         const resumes = (job.applications || [])
           .map(app => app.resume)
-          .filter(r => r && r._id); // Only valid resumes
+          .filter(r => r && r._id);
         setAppliedResumes(resumes);
-        setSelectedResumes([]); // Reset selection when job changes
+        setSelectedResumes([]);
       } catch (err) {
         setError('Failed to fetch applied resumes.');
       }
@@ -81,18 +77,22 @@ export default function Matching() {
   if (!user || user.role !== 'company') return <div>Unauthorized</div>;
 
   return (
-    <div style={{ padding: 24, background: '#fff', borderRadius: 8, boxShadow: '0 2px 8px #eee' }}>
-      <h2>Compare Resumes to Your Job</h2>
-      <form onSubmit={handleCompare}>
-        <div style={{ marginBottom: 16 }}>
-          <label>Job:</label>
+    <div style={{ maxWidth: 900, margin: '40px auto', padding: 32, background: '#f9f9f9', borderRadius: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
+      <h2 style={{ marginBottom: 24, color: '#1976d2', textAlign: 'center' }}>
+        Compare Resumes with Your Job
+      </h2>
+
+      <form onSubmit={handleCompare} style={{ display: 'grid', gap: 20 }}>
+        {/* Job Selector */}
+        <div>
+          <label style={{ fontWeight: 600 }}>Select Job</label>
           <select
             value={selectedJobId}
             onChange={e => setSelectedJobId(e.target.value)}
             required
-            style={{ width: '100%', padding: 8, marginTop: 4 }}
+            style={{ width: '100%', padding: 10, marginTop: 6, borderRadius: 6, border: '1px solid #ccc' }}
           >
-            <option value="">Select a job</option>
+            <option value="">-- Choose a job --</option>
             {jobs.map(job => (
               <option key={job._id} value={job._id}>
                 {job.title}
@@ -100,14 +100,16 @@ export default function Matching() {
             ))}
           </select>
         </div>
-        <div style={{ marginBottom: 16 }}>
-          <label>Resumes (applied to this job):</label>
+
+        {/* Resume Selector */}
+        <div>
+          <label style={{ fontWeight: 600 }}>Resumes Applied</label>
           <select
             multiple
             value={selectedResumes}
             onChange={e => setSelectedResumes(Array.from(e.target.selectedOptions, o => o.value))}
             required
-            style={{ width: '100%', padding: 8, marginTop: 4, height: 100 }}
+            style={{ width: '100%', padding: 10, marginTop: 6, borderRadius: 6, border: '1px solid #ccc', height: 120 }}
           >
             {appliedResumes.map(resume => (
               <option key={resume._id} value={resume._id}>
@@ -116,22 +118,44 @@ export default function Matching() {
             ))}
           </select>
         </div>
+
+        {/* Button */}
         <button
           type="submit"
           disabled={loading || !selectedJobId || selectedResumes.length === 0}
-          style={{ width: '100%', padding: 10, background: '#1976d2', color: '#fff', border: 'none', borderRadius: 4 }}
+          style={{
+            padding: 12,
+            background: loading ? '#999' : '#1976d2',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 8,
+            fontSize: 16,
+            fontWeight: 600,
+            cursor: loading ? 'not-allowed' : 'pointer',
+            transition: 'background 0.3s'
+          }}
         >
-          {loading ? 'Comparing...' : 'Compare'}
+          {loading ? 'Comparing...' : 'Compare Resumes'}
         </button>
       </form>
-      {error && <div style={{ color: 'red', marginTop: 12 }}>{error}</div>}
+
+      {/* Error */}
+      {error && <div style={{ color: 'red', marginTop: 16, fontWeight: 500 }}>{error}</div>}
+
+      {/* Results */}
       {results && Array.isArray(results) && (
-        <div style={{ marginTop: 24 }}>
-          <h3>Comparison Results</h3>
-          <ul>
+        <div style={{ marginTop: 32 }}>
+          <h3 style={{ marginBottom: 16 }}>📊 Comparison Results</h3>
+          <ul style={{ listStyle: 'none', padding: 0 }}>
             {results.map(match => (
-              <li key={match.resumeId} style={{ marginBottom: 12 }}>
-                <strong>{match.candidateName || 'Unnamed Candidate'}</strong>: Cosine Similarity: <b>{match.cosineSimilarity}%</b>
+              <li key={match.resumeId} style={{ background: '#fff', padding: 16, borderRadius: 8, boxShadow: '0 2px 6px rgba(0,0,0,0.05)', marginBottom: 12 }}>
+                <strong>{match.candidateName || 'Unnamed Candidate'}</strong>
+                <div style={{ marginTop: 6 }}>
+                  Cosine Similarity:{" "}
+                  <b style={{ color: match.cosineSimilarity > 70 ? 'green' : '#d32f2f' }}>
+                    {match.cosineSimilarity}%
+                  </b>
+                </div>
               </li>
             ))}
           </ul>
@@ -139,4 +163,4 @@ export default function Matching() {
       )}
     </div>
   );
-} 
+}
