@@ -234,6 +234,50 @@ export default function CompanyDashboard() {
                       </div>
                     )}
                   </div>
+
+                  {/* Sorted Resumes Section - ADD THIS PART */}
+                  {sortedResumes[job._id] && (
+                    <div style={{ marginTop: 24, padding: 16, background: '#e8f5e8', borderRadius: 8 }}>
+                      <h5 style={{ margin: '0 0 12px 0', color: '#2e7d32' }}>
+                        📊 Resumes Sorted by Similarity
+                      </h5>
+                      {sortedResumes[job._id].length === 0 ? (
+                        <div style={{ color: '#888', fontStyle: 'italic' }}>No matching resumes found.</div>
+                      ) : (
+                        <div>
+                          {sortedResumes[job._id].map(({ resume, score }, index) => (
+                            <div key={resume._id || index} style={{ 
+                              background: '#fff', 
+                              padding: 12, 
+                              borderRadius: 6, 
+                              marginBottom: 8,
+                              border: '1px solid #d1e7dd'
+                            }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <strong>{resume.candidate?.name || resume.uploadedBy?.name || 'Unknown'}</strong>
+                                <span style={{ 
+                                  background: '#d1e7dd', 
+                                  color: '#0f5132', 
+                                  padding: '4px 8px', 
+                                  borderRadius: 12,
+                                  fontSize: '12px',
+                                  fontWeight: 'bold'
+                                }}>
+                                  {(score * 100).toFixed(1)}% Match
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '14px', color: '#666', marginTop: 4 }}>
+                                Email: {resume.candidate?.email || resume.uploadedBy?.email || 'N/A'}
+                              </div>
+                              <div style={{ fontSize: '14px', color: '#666' }}>
+                                Skills: {resume.skills?.join(', ') || 'N/A'}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -242,4 +286,4 @@ export default function CompanyDashboard() {
       )}
     </div>
   );
-} 
+}
