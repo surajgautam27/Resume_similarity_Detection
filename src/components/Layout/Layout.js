@@ -24,7 +24,7 @@ export default function Layout({ children }) {
         { path: '/company-dashboard', label: 'Job Applications' },
         { path: '/jobs', label: 'Manage Jobs' },
         { path: '/matching', label: 'Matching' },
-        { path: '/analytics', label: 'Analytics' },
+        // { path: '/analytics', label: 'Analytics' },
         { path: '/posts', label: 'Social Feed' },
         { path: '/directory', label: '👥 Directory' },
         { path: '/profile', label: 'Profile' }
@@ -45,7 +45,7 @@ export default function Layout({ children }) {
         { path: '/jobs', label: 'Jobs' },
         { path: '/resumes', label: 'Resumes' },
         { path: '/matching', label: 'Matching' },
-        { path: '/analytics', label: 'Analytics' },
+        // { path: '/analytics', label: 'Analytics' },
         { path: '/posts', label: 'Social Feed' },
         { path: '/directory', label: '👥 Directory' },
         { path: '/profile', label: 'Profile' }
