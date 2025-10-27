@@ -32,7 +32,7 @@ export default function Posts() {
     const content = newPost.trim();
     if (!content) return;
     try {
-      const res = await axios.post('/api/posts', { content });
+      const res = await axios.post(`${API_URL}/posts`, { content });
       const created = res.data.post;
       setPosts(prev => [created, ...prev]);
       setNewPost('');

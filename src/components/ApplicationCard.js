@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { showSuccess, showError } from '../utils/toast';
 import { useAuth } from '../contexts/AuthContext';
-
+import { API_URL } from '../utils/Api';
 export default function ApplicationCard({ application, jobId, applicationIndex, onUpdate }) {
   const { user } = useAuth();
   const [showComments, setShowComments] = useState(false);
@@ -19,7 +19,7 @@ export default function ApplicationCard({ application, jobId, applicationIndex, 
     setIsLiking(true);
     
     try {
-      const response = await axios.post(`/api/jobs/${jobId}/applications/${applicationIndex}/like`);
+      const response = await axios.post(`${API_URL}/jobs/${jobId}/applications/${applicationIndex}/like`);
       showSuccess(response.data.message);
       if (onUpdate) {
         onUpdate(response.data.application);
@@ -37,7 +37,7 @@ export default function ApplicationCard({ application, jobId, applicationIndex, 
     
     setIsCommenting(true);
     try {
-      const response = await axios.post(`/api/jobs/${jobId}/applications/${applicationIndex}/comments`, {
+      const response = await axios.post(`${API_URL}/jobs/${jobId}/applications/${applicationIndex}/comments`, {
         text: newComment
       });
       showSuccess('Comment added successfully');
@@ -58,7 +58,7 @@ export default function ApplicationCard({ application, jobId, applicationIndex, 
     
     setIsUpdatingStatus(true);
     try {
-      const response = await axios.patch(`/api/jobs/${jobId}/applications/${applicationIndex}/status`, {
+      const response = await axios.patch(`${API_URL}/jobs/${jobId}/applications/${applicationIndex}/status`, {
         status,
         notes
       });
