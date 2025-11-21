@@ -70,7 +70,17 @@ cp .env.example .env
 MONGODB_URI=mongodb://localhost:27017/careerNexus
 JWT_SECRET=your_jwt_secret_here
 PORT=5000
+
+# Optional: For enhanced AI-powered resume parsing (recommended)
+# Get your API key from https://platform.openai.com/api-keys
+OPENAI_API_KEY=your_openai_api_key_here
 ```
+
+**Note:** The resume parser works in two modes:
+- **AI Mode (Recommended)**: If `OPENAI_API_KEY` is set, resumes are parsed using OpenAI GPT-4o-mini for highly accurate extraction of experience, skills, education, and other details.
+- **Fallback Mode**: If no API key is provided, the system uses an advanced rule-based parser with NLP techniques.
+
+For best results, we recommend using the AI-powered parser by setting your OpenAI API key.
 
 4. **Start the application**
 ```bash

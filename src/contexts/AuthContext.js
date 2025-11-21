@@ -93,6 +93,18 @@ export const AuthProvider = ({ children }) => {
     toast.info('Logged out successfully');
   };
 
+  const refreshUser = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/auth/profile`);
+      setUser(response.data.user);
+      return { success: true, user: response.data.user };
+    } catch (error) {
+      const message = error.response?.data?.error || 'Failed to refresh profile';
+      console.error('Refresh profile error:', error);
+      return { success: false, error: message };
+    }
+  };
+
   const updateProfile = async (profileData) => {
     try {
       const response = await axios.put(`${API_URL}/auth/profile`, profileData);
@@ -130,6 +142,7 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
+    refreshUser,
     updateProfile,
     changePassword
   };

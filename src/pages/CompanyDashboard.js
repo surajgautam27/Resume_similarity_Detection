@@ -37,7 +37,6 @@ export default function CompanyDashboard() {
     try {
       console.log('Fetching matches for job:', jobId);
       const res = await axios.get(`${API_URL}/jobs/${jobId}/match-resumes`);
-      console.log('Match response:', res.data);
       setSortedResumes(prev => ({ ...prev, [jobId]: res.data.matches }));
     } catch (err) {
       console.error('Error fetching matches:', err);
@@ -58,12 +57,19 @@ export default function CompanyDashboard() {
     return job.applications ? job.applications.length : 0;
   };
 
-  const handleApplicationUpdate = (jobId, applicationIndex, updatedApplication) => {
+  const handleApplicationUpdate = (jobId, matcher, updatedApplication) => {
     setJobs(prevJobs => 
       prevJobs.map(job => {
         if (job._id === jobId) {
-          const updatedApplications = [...job.applications];
-          updatedApplications[applicationIndex] = updatedApplication;
+          const updatedApplications = (job.applications || []).map((app, idx) => {
+            const currentId = app._id?.toString() || '';
+            const targetId = matcher?.applicationId?.toString() || '';
+            const matchesId = currentId && targetId && currentId === targetId;
+            const matchesIndex =
+              typeof matcher?.applicationIndex === 'number' &&
+              idx === matcher.applicationIndex;
+            return matchesId || matchesIndex ? updatedApplication : app;
+          });
           return { ...job, applications: updatedApplications };
         }
         return job;
@@ -211,15 +217,24 @@ export default function CompanyDashboard() {
                     ) : (
                       <div>
                         {job.applications && job.applications.length > 0 ? (
-                          job.applications.map((application, index) => (
-                            <ApplicationCard
-                              key={`${job._id}-${index}`}
-                              application={application}
-                              jobId={job._id}
-                              applicationIndex={index}
-                              onUpdate={(updatedApplication) => handleApplicationUpdate(job._id, index, updatedApplication)}
-                            />
-                          ))
+                          job.applications.map((application, index) => {
+                            const applicationId = application._id;
+                            return (
+                              <ApplicationCard
+                                key={applicationId || `${job._id}-${index}`}
+                                application={application}
+                                jobId={job._id}
+                                applicationId={applicationId}
+                                onUpdate={(updatedApplication) =>
+                                  handleApplicationUpdate(
+                                    job._id,
+                                    { applicationId, applicationIndex: index },
+                                    updatedApplication
+                                  )
+                                }
+                              />
+                            );
+                          })
                         ) : (
                           <div style={{ 
                             textAlign: 'center', 

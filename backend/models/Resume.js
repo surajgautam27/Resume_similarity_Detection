@@ -55,6 +55,23 @@ const resumeSchema = new mongoose.Schema({
     type: [String],
     default: []
   },
+  summary: {
+    type: String,
+    trim: true,
+    maxlength: 2000
+  },
+  highlights: {
+    type: [String],
+    default: []
+  },
+  workExperience: {
+    type: [String],
+    default: []
+  },
+  achievements: {
+    type: [String],
+    default: []
+  },
   processed: {
     type: Boolean,
     default: false

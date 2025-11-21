@@ -25,8 +25,6 @@ router.get('/', auth, async (req, res) => {
       .populate('createdBy', 'name email')
       .populate('applications.user', 'name email')
       .populate('applications.resume')
-      .populate('applications.likes', 'name email')
-      .populate('applications.comments.user', 'name email')
       .sort(sortOptions)
       .limit(limit * 1)
       .skip((page - 1) * limit)
@@ -79,9 +77,7 @@ router.get('/:id', auth, async (req, res) => {
     let job = await Job.findById(req.params.id)
       .populate('createdBy', 'name email')
       .populate('applications.user', 'name email')
-      .populate('applications.resume')
-      .populate('applications.likes', 'name email')
-      .populate('applications.comments.user', 'name email');
+      .populate('applications.resume');
     
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });
@@ -445,134 +441,9 @@ router.get('/:id/match-resumes', auth, async (req, res) => {
   }
 });
 
-// Like/unlike an application
-router.post('/:jobId/applications/:applicationIndex/like', auth, async (req, res) => {
-  try {
-    const { jobId, applicationIndex } = req.params;
-    const userId = req.user.userId;
-
-    const job = await Job.findById(jobId);
-    if (!job) {
-      return res.status(404).json({ error: 'Job not found' });
-    }
-
-    const application = job.applications[applicationIndex];
-    if (!application) {
-      return res.status(404).json({ error: 'Application not found' });
-    }
-
-    // Check if user has permission to like this application
-    if (req.user.role === 'developer') {
-      // Developers can only like applications they submitted
-      if (application.user.toString() !== userId) {
-        return res.status(403).json({ error: 'You can only like your own applications' });
-      }
-    } else if (req.user.role === 'company') {
-      // Companies can only like applications for jobs they created
-      if (job.createdBy.toString() !== userId) {
-        return res.status(403).json({ error: 'You can only like applications for your own jobs' });
-      }
-    }
-
-    // Initialize likes array if it doesn't exist
-    if (!application.likes) {
-      application.likes = [];
-    }
-
-    const liked = application.likes.some(id => id.toString() === userId);
-    
-    if (liked) {
-      // Unlike
-      application.likes = application.likes.filter(id => id.toString() !== userId);
-    } else {
-      // Like
-      application.likes.push(userId);
-    }
-
-    await job.save();
-
-    // Populate user info for response
-    await job.populate('applications.user', 'name email');
-    await job.populate('applications.likes', 'name email');
-
-    res.json({ 
-      application: job.applications[applicationIndex],
-      likesCount: job.applications[applicationIndex].likes.length,
-      message: liked ? 'Application unliked' : 'Application liked'
-    });
-  } catch (error) {
-    console.error('Like application error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Add comment to an application
-router.post('/:jobId/applications/:applicationIndex/comments', auth, [
-  body('text').trim().isLength({ min: 1, max: 500 }).withMessage('Comment must be 1-500 characters')
-], async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { jobId, applicationIndex } = req.params;
-    const userId = req.user.userId;
-    const { text } = req.body;
-
-    const job = await Job.findById(jobId);
-    if (!job) {
-      return res.status(404).json({ error: 'Job not found' });
-    }
-
-    const application = job.applications[applicationIndex];
-    if (!application) {
-      return res.status(404).json({ error: 'Application not found' });
-    }
-
-    // Check if user has permission to comment on this application
-    if (req.user.role === 'developer') {
-      // Developers can only comment on applications they submitted
-      if (application.user.toString() !== userId) {
-        return res.status(403).json({ error: 'You can only comment on your own applications' });
-      }
-    } else if (req.user.role === 'company') {
-      // Companies can only comment on applications for jobs they created
-      if (job.createdBy.toString() !== userId) {
-        return res.status(403).json({ error: 'You can only comment on applications for your own jobs' });
-      }
-    }
-
-    // Initialize comments array if it doesn't exist
-    if (!application.comments) {
-      application.comments = [];
-    }
-
-    // Add the comment
-    application.comments.push({
-      user: userId,
-      text: text,
-      createdAt: new Date()
-    });
-
-    await job.save();
-
-    // Populate user info for response
-    await job.populate('applications.user', 'name email');
-    await job.populate('applications.comments.user', 'name email');
-
-    res.status(201).json({ 
-      application: job.applications[applicationIndex],
-      comments: job.applications[applicationIndex].comments
-    });
-  } catch (error) {
-    console.error('Add application comment error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
 
 // Update application status (for companies)
-router.patch('/:jobId/applications/:applicationIndex/status', auth, [
+router.patch('/:jobId/applications/:applicationId/status', auth, [
   body('status').isIn(['pending', 'reviewed', 'shortlisted', 'rejected', 'hired']).withMessage('Invalid status'),
   body('notes').optional().trim().isLength({ max: 1000 }).withMessage('Notes cannot exceed 1000 characters')
 ], async (req, res) => {
@@ -582,7 +453,7 @@ router.patch('/:jobId/applications/:applicationIndex/status', auth, [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { jobId, applicationIndex } = req.params;
+    const { jobId, applicationId } = req.params;
     const { status, notes } = req.body;
 
     // Only companies can update application status
@@ -600,7 +471,7 @@ router.patch('/:jobId/applications/:applicationIndex/status', auth, [
       return res.status(403).json({ error: 'You can only update applications for your own jobs' });
     }
 
-    const application = job.applications[applicationIndex];
+    const application = job.applications.id(applicationId);
     if (!application) {
       return res.status(404).json({ error: 'Application not found' });
     }
@@ -616,8 +487,10 @@ router.patch('/:jobId/applications/:applicationIndex/status', auth, [
     // Populate user info for response
     await job.populate('applications.user', 'name email');
 
+    const updatedApplication = job.applications.id(applicationId);
+
     res.json({ 
-      application: job.applications[applicationIndex],
+      application: updatedApplication,
       message: 'Application status updated successfully'
     });
   } catch (error) {

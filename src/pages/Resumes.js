@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { showSuccess, showError } from '../utils/toast';
 
 export default function Resumes() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [resumes, setResumes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -76,6 +76,7 @@ export default function Resumes() {
       }
       
       showSuccess('Resume uploaded successfully!');
+      await refreshUser?.();
     } catch (err) {
       setUploadError(err.response?.data?.error || 'Failed to upload resume.');
     } finally {
@@ -98,6 +99,31 @@ export default function Resumes() {
       showError('Failed to delete resume: ' + (err.response?.data?.error || err.message));
     } finally {
       setDeletingResumeId(null);
+    }
+  };
+
+  const handlePreviewResume = async (resumeId) => {
+    if (!resumeId) {
+      showError('Unable to locate resume file.');
+      return;
+    }
+
+    try {
+      const response = await axios.get(`${API_URL}/resumes/${resumeId}/file`, { responseType: 'blob' });
+      const blob = new Blob([response.data], {
+        type: response.headers['content-type'] || 'application/pdf'
+      });
+      const blobURL = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobURL;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => window.URL.revokeObjectURL(blobURL), 60 * 1000);
+    } catch (err) {
+      showError(err.response?.data?.error || 'Failed to open resume preview.');
     }
   };
 
@@ -167,27 +193,105 @@ export default function Resumes() {
                 background: '#fff',
                 position: 'relative'
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 280 }}>
                     <h4 style={{ margin: '0 0 8px 0', color: '#495057' }}>
                       {resume.originalName || resume.filename}
                     </h4>
-                    {resume.candidate && (
+                    <p style={{ margin: '4px 0', color: '#6c757d', fontSize: '14px' }}>
+                      <strong>Candidate:</strong> {resume.candidate?.name || 'Unknown'}
+                      {resume.candidate?.email && ` (${resume.candidate.email})`}
+                    </p>
+                    {resume.candidate?.phone && (
                       <p style={{ margin: '4px 0', color: '#6c757d', fontSize: '14px' }}>
-                        <strong>Candidate:</strong> {resume.candidate.name || 'Unknown'} 
-                        {resume.candidate.email && ` (${resume.candidate.email})`}
+                        <strong>Phone:</strong> {resume.candidate.phone}
                       </p>
                     )}
-                    {resume.skills && resume.skills.length > 0 && (
+                    {resume.candidate?.location && (
+                      <p style={{ margin: '4px 0', color: '#6c757d', fontSize: '14px' }}>
+                        <strong>Location:</strong> {resume.candidate.location}
+                      </p>
+                    )}
+                    {typeof resume.experience === 'number' && (
+                      <p style={{ margin: '4px 0', color: '#6c757d', fontSize: '14px' }}>
+                        <strong>Experience:</strong> {resume.experience} years
+                      </p>
+                    )}
+                    {resume.summary && (
+                      <p style={{ margin: '8px 0', color: '#4a4a4a', fontSize: '14px', lineHeight: 1.6 }}>
+                        {resume.summary}
+                      </p>
+                    )}
+                    {resume.skills?.length > 0 && (
                       <p style={{ margin: '4px 0', color: '#6c757d', fontSize: '14px' }}>
                         <strong>Skills:</strong> {resume.skills.join(', ')}
                       </p>
                     )}
-                    <p style={{ margin: '4px 0', color: '#6c757d', fontSize: '14px' }}>
+                    {resume.languages?.length > 0 && (
+                      <p style={{ margin: '4px 0', color: '#6c757d', fontSize: '14px' }}>
+                        <strong>Languages:</strong> {resume.languages.join(', ')}
+                      </p>
+                    )}
+                    {resume.highlights?.length > 0 && (
+                      <div style={{ marginTop: 8 }}>
+                        <strong style={{ color: '#495057' }}>Highlights:</strong>
+                        <ul style={{ margin: '6px 0', paddingLeft: 18, color: '#6c757d', fontSize: '13px' }}>
+                          {resume.highlights.slice(0, 5).map((highlight, idx) => (
+                            <li key={`highlight-${resume._id}-${idx}`}>{highlight}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {resume.education?.length > 0 && (
+                      <div style={{ marginTop: 8 }}>
+                        <strong style={{ color: '#495057' }}>Education:</strong>
+                        <ul style={{ margin: '6px 0', paddingLeft: 18, color: '#6c757d', fontSize: '13px' }}>
+                          {resume.education.slice(0, 4).map((edu, idx) => (
+                            <li key={`edu-${resume._id}-${idx}`}>{edu}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {resume.certifications?.length > 0 && (
+                      <div style={{ marginTop: 8 }}>
+                        <strong style={{ color: '#495057' }}>Certifications:</strong>
+                        <ul style={{ margin: '6px 0', paddingLeft: 18, color: '#6c757d', fontSize: '13px' }}>
+                          {resume.certifications.slice(0, 4).map((cert, idx) => (
+                            <li key={`cert-${resume._id}-${idx}`}>{cert}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {resume.projects?.length > 0 && (
+                      <div style={{ marginTop: 8 }}>
+                        <strong style={{ color: '#495057' }}>Projects:</strong>
+                        <ul style={{ margin: '6px 0', paddingLeft: 18, color: '#6c757d', fontSize: '13px' }}>
+                          {resume.projects.slice(0, 4).map((project, idx) => (
+                            <li key={`proj-${resume._id}-${idx}`}>{project}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    <p style={{ margin: '4px 0', color: '#6c757d', fontSize: '12px' }}>
                       <strong>Uploaded:</strong> {resume.createdAt ? new Date(resume.createdAt).toLocaleDateString() : 'N/A'}
+                      {resume.metadata?.pageCount && ` • ${resume.metadata.pageCount} pages`}
                     </p>
                   </div>
-                  <div style={{ display: 'flex', gap: 8, marginLeft: 16 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 140 }}>
+                    <button
+                      onClick={() => handlePreviewResume(resume._id)}
+                      style={{
+                        padding: '8px 12px',
+                        background: '#0d6efd',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 4,
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                    >
+                      View PDF
+                    </button>
                     <button
                       onClick={() => handleDeleteResume(resume._id)}
                       disabled={deletingResumeId === resume._id}

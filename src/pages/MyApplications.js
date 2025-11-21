@@ -32,12 +32,19 @@ export default function MyApplications() {
     if (user && user.role === 'developer') fetchMyApplications();
   }, [user]);
 
-  const handleApplicationUpdate = (jobId, applicationIndex, updatedApplication) => {
+  const handleApplicationUpdate = (jobId, matcher, updatedApplication) => {
     setJobs(prevJobs => 
       prevJobs.map(job => {
         if (job._id === jobId) {
-          const updatedApplications = [...job.applications];
-          updatedApplications[applicationIndex] = updatedApplication;
+          const updatedApplications = (job.applications || []).map((app, idx) => {
+            const currentId = app._id?.toString() || '';
+            const targetId = matcher?.applicationId?.toString() || '';
+            const matchesId = currentId && targetId && currentId === targetId;
+            const matchesIndex =
+              typeof matcher?.applicationIndex === 'number' &&
+              idx === matcher.applicationIndex;
+            return matchesId || matchesIndex ? updatedApplication : app;
+          });
           return { ...job, applications: updatedApplications };
         }
         return job;
@@ -57,6 +64,7 @@ export default function MyApplications() {
     return {
       ...job,
       myApplication: myAppIndex !== -1 ? job.applications[myAppIndex] : null,
+      myApplicationId: myAppIndex !== -1 ? job.applications[myAppIndex]._id : null,
       myApplicationIndex: myAppIndex
     };
   }).filter(job => job.myApplication);
@@ -91,8 +99,14 @@ export default function MyApplications() {
             <ApplicationCard
               application={job.myApplication}
               jobId={job._id}
-              applicationIndex={job.myApplicationIndex}
-              onUpdate={(updatedApplication) => handleApplicationUpdate(job._id, job.myApplicationIndex, updatedApplication)}
+              applicationId={job.myApplicationId}
+              onUpdate={(updatedApplication) =>
+                handleApplicationUpdate(
+                  job._id,
+                  { applicationId: job.myApplicationId, applicationIndex: job.myApplicationIndex },
+                  updatedApplication
+                )
+              }
             />
           </div>
         ))

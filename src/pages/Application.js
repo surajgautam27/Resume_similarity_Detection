@@ -48,12 +48,20 @@ export default function Application() {
     }
   };
 
-  const handleApplicationUpdate = (jobId, applicationIndex, updatedApplication) => {
+  const handleApplicationUpdate = (jobId, matcher, updatedApplication) => {
     setJobs(prevJobs => 
       prevJobs.map(job => {
         if (job._id === jobId) {
-          const updatedApplications = [...job.applications];
-          updatedApplications[applicationIndex] = updatedApplication;
+          const updatedApplications = (job.applications || []).map((app, idx) => {
+            const matchesId =
+              matcher?.applicationId &&
+              app._id &&
+              app._id.toString() === matcher.applicationId.toString();
+            const matchesIndex =
+              typeof matcher?.applicationIndex === 'number' &&
+              idx === matcher.applicationIndex;
+            return matchesId || matchesIndex ? updatedApplication : app;
+          });
           return { ...job, applications: updatedApplications };
         }
         return job;
@@ -118,15 +126,24 @@ export default function Application() {
                 {job.applications?.length === 0 ? (
                   <div style={{ color: '#888', fontStyle: 'italic' }}>No applications yet.</div>
                 ) : (
-                  job.applications.map((application, index) => (
-                    <ApplicationCard
-                      key={`${job._id}-${index}`}
-                      application={application}
-                      jobId={job._id}
-                      applicationIndex={index}
-                      onUpdate={(updatedApplication) => handleApplicationUpdate(job._id, index, updatedApplication)}
-                    />
-                  ))
+                  job.applications.map((application, index) => {
+                    const applicationId = application._id;
+                    return (
+                      <ApplicationCard
+                        key={applicationId || `${job._id}-${index}`}
+                        application={application}
+                        jobId={job._id}
+                        applicationId={applicationId}
+                        onUpdate={(updatedApplication) =>
+                          handleApplicationUpdate(
+                            job._id,
+                            { applicationId, applicationIndex: index },
+                            updatedApplication
+                          )
+                        }
+                      />
+                    );
+                  })
                 )}
               </div>
             )}

@@ -11,11 +11,11 @@ import {
   Alert,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { API_URL } from '../utils/Api';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Register() {
   const navigate = useNavigate();
+  const { register: registerUser } = useAuth();
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'developer' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,15 +29,14 @@ export default function Register() {
     setLoading(true);
     setError('');
     try {
-      const res = await axios.post(`${API_URL}/auth/register`, form);
-      localStorage.setItem('token', res.data.token);
-      navigate('/dashboard');
+      const result = await registerUser(form);
+      if (result.success) {
+        navigate('/dashboard');
+      } else {
+        setError(result.error || 'Registration failed.');
+      }
     } catch (err) {
-      setError(
-        err.response?.data?.error ||
-        (err.response?.data?.errors && err.response.data.errors[0]?.msg) ||
-        'Registration failed.'
-      );
+      setError(err.message || 'Registration failed.');
     } finally {
       setLoading(false);
     }

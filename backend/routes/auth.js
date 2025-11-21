@@ -16,10 +16,25 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Invalid role selected' });
     }
 
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: 'Email already registered' });
+    }
+
     const user = new User({ name, email, password, role });
     await user.save();
 
-    res.status(201).json({ message: 'User registered successfully', user });
+    const token = jwt.sign(
+      { userId: user._id, email: user.email, role: user.role },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '24h' }
+    );
+
+    res.status(201).json({ 
+      message: 'User registered successfully', 
+      token,
+      user: user.toJSON()
+    });
   } catch (error) {
     console.error('Registration error:', error);
     res.status(500).json({ error: 'Server error' });

@@ -82,28 +82,6 @@ const jobSchema = new mongoose.Schema({
       type: Date,
       default: Date.now
     },
-    // Social features for applications
-    likes: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    }],
-    comments: [{
-      user: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
-      },
-      text: {
-        type: String,
-        required: true,
-        trim: true,
-        maxlength: [500, 'Comment cannot be more than 500 characters']
-      },
-      createdAt: {
-        type: Date,
-        default: Date.now
-      }
-    }],
     status: {
       type: String,
       enum: ['pending', 'reviewed', 'shortlisted', 'rejected', 'hired'],
