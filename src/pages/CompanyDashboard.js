@@ -278,7 +278,7 @@ export default function CompanyDashboard() {
                                   fontSize: '12px',
                                   fontWeight: 'bold'
                                 }}>
-                                  {(score * 100).toFixed(1)}% Match
+                                  {score}% Match
                                 </span>
                               </div>
                               <div style={{ fontSize: '14px', color: '#666', marginTop: 4 }}>

@@ -351,14 +351,7 @@ router.get('/:id/match-resumes', auth, async (req, res) => {
       });
     });
 
-    const jobText = job.description + ' ' + (job.requirements || []).join(' ');
-    const TfIdf = natural.TfIdf;
-    const tfidf = new TfIdf();
-
-    // Add job description as the first document
-    tfidf.addDocument(jobText);
-
-    // Add each resume as a document
+    // Get resumes from applications
     const resumes = job.applications
       .map(app => app.resume)
       .filter(Boolean);
@@ -380,60 +373,93 @@ router.get('/:id/match-resumes', auth, async (req, res) => {
       return res.json({ matches: [] });
     }
 
-    // Validate that resumes have extracted text
-    const validResumes = resumes.filter(resume => {
-      if (!resume.extractedText || resume.extractedText.trim().length === 0) {
-        console.log(`Resume ${resume._id} has no extracted text`);
-        return false;
+    // Use improved weighted similarity calculation
+    const { calculateWeightedSimilarity } = require('../utils/similarityUtils');
+    
+    // Process resumes in batches to prevent memory issues and crashes
+    const BATCH_SIZE = 50; // Process 50 resumes at a time
+    const similarities = [];
+    
+    console.log(`Processing ${resumes.length} resumes in batches of ${BATCH_SIZE}`);
+    
+    for (let i = 0; i < resumes.length; i += BATCH_SIZE) {
+      const batch = resumes.slice(i, i + BATCH_SIZE);
+      console.log(`Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(resumes.length / BATCH_SIZE)}`);
+      
+      const batchResults = batch.map(resume => {
+        try {
+          if (!resume) {
+            console.warn('Null resume found, skipping');
+            return null;
+          }
+          
+          // Limit extractedText size to prevent memory issues
+          if (resume.extractedText && resume.extractedText.length > 50000) {
+            resume.extractedText = resume.extractedText.substring(0, 50000);
+          }
+          
+          const matchResult = calculateWeightedSimilarity(job, resume);
+          const score = matchResult?.score ?? 0;
+          
+          return { 
+            resume, 
+            score: Math.min(100, Math.max(0, score)), // Ensure 0-100 range
+            breakdown: matchResult?.breakdown || {}
+          };
+        } catch (error) {
+          console.error('Error calculating similarity for resume:', resume?._id, error.message);
+          return {
+            resume,
+            score: 0,
+            breakdown: {}
+          };
+        }
+      }).filter(item => item !== null && item.resume !== null && item.resume !== undefined);
+      
+      similarities.push(...batchResults);
+      
+      // Small delay between batches to prevent overwhelming the system
+      if (i + BATCH_SIZE < resumes.length) {
+        await new Promise(resolve => setTimeout(resolve, 10)); // 10ms delay
       }
-      return true;
-    });
+    }
+    
+    console.log(`Successfully processed ${similarities.length} resumes`);
 
-    console.log('Valid resumes with extracted text:', validResumes.length);
-
-    // If no resumes have extracted text, create a simple fallback
-    if (validResumes.length === 0 && resumes.length > 0) {
-      console.log('No resumes with extracted text found, using fallback...');
-      const fallbackResumes = resumes.map(resume => ({
-        ...resume,
-        extractedText: `${resume.candidate?.name || 'Unknown'} ${resume.skills?.join(' ') || ''} ${resume.originalName || ''}`
-      }));
-      validResumes.push(...fallbackResumes);
-      console.log('Added fallback resumes:', fallbackResumes.length);
+    // Sort by score descending - include ALL resumes even with zero similarity
+    // Add safety checks to prevent crashes
+    try {
+      console.log('Starting sort operation...');
+      similarities.sort((a, b) => {
+        try {
+          const scoreA = a?.score ?? 0;
+          const scoreB = b?.score ?? 0;
+          // Handle NaN cases
+          if (isNaN(scoreA)) return 1;
+          if (isNaN(scoreB)) return -1;
+          // Ensure we're comparing numbers
+          const diff = Number(scoreB) - Number(scoreA);
+          return isNaN(diff) ? 0 : diff;
+        } catch (error) {
+          console.error('Error in sort comparison:', error.message);
+          return 0;
+        }
+      });
+      console.log('Sort operation completed successfully');
+    } catch (error) {
+      console.error('Critical error during sorting:', error);
+      // If sorting fails, return unsorted results rather than crashing
+      console.log('Returning unsorted results due to sort error');
     }
 
-    validResumes.forEach(resume => {
-      tfidf.addDocument(resume.extractedText || '');
-    });
-
-    // Compute cosine similarity for each resume
-    const similarities = validResumes.map((resume, idx) => {
-      // Use cosine similarity between job and resume
-      const jobVector = tfidf.listTerms(0).reduce((acc, term) => {
-        acc[term.term] = term.tfidf;
-        return acc;
-      }, {});
-      const resumeVector = tfidf.listTerms(idx + 1).reduce((acc, term) => {
-        acc[term.term] = term.tfidf;
-        return acc;
-      }, {});
-      // Compute cosine similarity
-      const allTerms = new Set([...Object.keys(jobVector), ...Object.keys(resumeVector)]);
-      const jobArr = Array.from(allTerms).map(term => jobVector[term] || 0);
-      const resumeArr = Array.from(allTerms).map(term => resumeVector[term] || 0);
-      const dot = jobArr.reduce((sum, v, i) => sum + v * resumeArr[i], 0);
-      const magA = Math.sqrt(jobArr.reduce((sum, v) => sum + v * v, 0));
-      const magB = Math.sqrt(resumeArr.reduce((sum, v) => sum + v * v, 0));
-      const score = magA && magB ? dot / (magA * magB) : 0;
-      return { resume, score };
-    });
-
-    // Sort by score descending
-    similarities.sort((a, b) => b.score - a.score);
-
     console.log('Final similarities:', similarities.length);
-    console.log('Similarities:', similarities.map(s => ({ id: s.resume._id, score: s.score })));
+    console.log('Similarities (including zero scores):', similarities.map(s => ({ 
+      id: s.resume._id, 
+      score: s.score,
+      candidateName: s.resume.candidate?.name || 'Unknown'
+    })));
 
+    // Return all matches, including those with zero similarity
     res.json({ matches: similarities });
   } catch (error) {
     console.error('Match resumes error:', error);

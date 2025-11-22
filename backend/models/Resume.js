@@ -40,7 +40,7 @@ const resumeSchema = new mongoose.Schema({
     default: 0
   },
   education: {
-    type: [String],
+    type: [mongoose.Schema.Types.Mixed],
     default: []
   },
   languages: {
@@ -97,6 +97,10 @@ const resumeSchema = new mongoose.Schema({
     processingTime: Number,
     wordCount: Number,
     pageCount: Number
+  },
+  parsedData: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
   }
 }, {
   timestamps: true

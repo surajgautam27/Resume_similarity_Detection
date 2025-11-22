@@ -93,20 +93,59 @@ const SKILLS_DATABASE = {
 function extractContactInfo(text) {
   const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
   
-  // Extract name (usually first non-empty line)
-  const name = lines[0] || '';
+  // Extract name (usually first non-empty line, but skip if it's a section header)
+  let name = '';
+  for (let i = 0; i < Math.min(3, lines.length); i++) {
+    const line = lines[i];
+    const lower = line.toLowerCase();
+    // Skip section headers
+    if (!/^(experience|education|skills|projects|summary|contact)/i.test(lower) && 
+        line.length > 2 && line.length < 50 && 
+        /^[A-Z][a-z]+(\s+[A-Z][a-z]+)+/.test(line)) {
+      name = line;
+      break;
+    }
+  }
   
-  // Extract email
-  const emailMatch = text.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-  const email = emailMatch ? emailMatch[1] : '';
+  // Extract email (get first valid email)
+  const emailMatches = text.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g);
+  const email = emailMatches ? emailMatches[0] : '';
   
-  // Extract phone
-  const phoneMatch = text.match(/(\+?[\d\s\-\(\)]{10,})/);
-  const phone = phoneMatch ? phoneMatch[1].replace(/\s+/g, ' ').trim() : '';
+  // Extract phone (improved pattern for international numbers)
+  const phonePatterns = [
+    /\+?\d{1,4}[\s\-]?\d{1,4}[\s\-]?\d{1,4}[\s\-]?\d{1,4}[\s\-]?\d{1,9}/g,
+    /\+?[\d\s\-\(\)]{10,}/g
+  ];
+  let phone = '';
+  for (const pattern of phonePatterns) {
+    const matches = text.match(pattern);
+    if (matches) {
+      phone = matches[0].replace(/\s+/g, ' ').trim();
+      if (phone.length >= 10) break;
+    }
+  }
   
-  // Extract location (look for city, state patterns)
-  const locationMatch = text.match(/([A-Z][a-z]+(?:,\s*[A-Z][a-z]+)*(?:,\s*[A-Z]{2,})?)/);
-  const location = locationMatch ? locationMatch[1] : '';
+  // Extract location (look for city, state patterns - improved)
+  // Look for patterns like "City, State" or "Location • Phone • Email"
+  const locationPatterns = [
+    /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,\s*[A-Z][a-z]+)(?:\s*[•·]|\s*$)/, // "City, State •"
+    /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)(?:\s*[•·]\s*\+?\d)/ // "City • +phone"
+  ];
+  let location = '';
+  for (const pattern of locationPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      const loc = match[1].trim();
+      // Validate it's not a name or other text
+      if (loc.length > 3 && loc.length < 50 && 
+          !loc.toLowerCase().includes('developer') &&
+          !loc.toLowerCase().includes('email') &&
+          !loc.toLowerCase().includes('phone')) {
+        location = loc;
+        break;
+      }
+    }
+  }
   
   return { name, email, phone, location };
 }
@@ -162,13 +201,18 @@ function extractStructuredSections(text) {
     achievements: ['achievements', 'accomplishments', 'awards']
   };
   
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const lowerLine = line.toLowerCase();
     let foundSection = null;
     
-    // Check if this line is a section header
+    // Check if this line is a section header (must be at start of line and not too long)
     for (const [sectionName, headers] of Object.entries(sectionHeaders)) {
-      if (headers.some(header => lowerLine.includes(header))) {
+      if (headers.some(header => {
+        // Header should be at the start of the line or after common prefixes
+        const headerPattern = new RegExp(`^(?:\\d+\\.?\\s*)?${header.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s*:)?$`, 'i');
+        return headerPattern.test(lowerLine) && line.length < 40;
+      })) {
         foundSection = sectionName;
         break;
       }
@@ -180,7 +224,16 @@ function extractStructuredSections(text) {
         if (currentSection === 'summary') {
           sections[currentSection] = currentContent.join(' ').substring(0, 500); // Limit summary
         } else {
-          sections[currentSection] = currentContent.filter(item => item.length > 10); // Filter short items
+          // Filter out contact info and very short items
+          sections[currentSection] = currentContent.filter(item => {
+            if (item.length < 5) return false;
+            const lower = item.toLowerCase();
+            // Filter out contact information
+            if (/^email|^phone|^contact|^address|@|github\.com|linkedin\.com/i.test(lower)) {
+              return false;
+            }
+            return true;
+          });
         }
       }
       
@@ -188,9 +241,24 @@ function extractStructuredSections(text) {
       currentSection = foundSection;
       currentContent = [];
     } else if (currentSection) {
-      // Add content to current section
-      if (line.length > 3) { // Ignore very short lines
-        currentContent.push(line);
+      // Check if we've hit another section (detect section boundaries)
+      const nextSectionPattern = /^(experience|work|employment|projects|skills|certifications|languages|contact|education|academic)/i;
+      if (nextSectionPattern.test(lowerLine) && line.length < 40 && i > 0) {
+        // This might be a new section, end current one
+        if (currentSection === 'summary') {
+          sections[currentSection] = currentContent.join(' ').substring(0, 500);
+        } else {
+          sections[currentSection] = currentContent.filter(item => item.length > 5);
+        }
+        currentSection = null;
+        currentContent = [];
+      } else if (line.length > 3) {
+        // Add content to current section
+        // Filter out contact info
+        const lower = line.toLowerCase();
+        if (!/^email|^phone|^contact|^address|@|github\.com|linkedin\.com/i.test(lower)) {
+          currentContent.push(line);
+        }
       }
     }
   }
@@ -247,9 +315,28 @@ function extractExperienceYears(text) {
 }
 
 /**
- * Extract education information
+ * Extract education information (improved)
  */
 function extractEducation(text) {
+  const { parseEducationSection } = require('./educationParser');
+  const structuredEducation = parseEducationSection(text);
+  
+  // Convert to string format for backward compatibility, but prefer structured
+  if (structuredEducation.length > 0) {
+    return structuredEducation.map(edu => {
+      const parts = [];
+      if (edu.degree) parts.push(edu.degree);
+      if (edu.field) parts.push(edu.field);
+      if (edu.school) parts.push(edu.school);
+      if (edu.startYear || edu.endYear) {
+        const years = [edu.startYear, edu.endYear].filter(Boolean).join(' - ');
+        if (years) parts.push(`(${years})`);
+      }
+      return parts.join(' ') || edu.school || '';
+    }).filter(Boolean);
+  }
+  
+  // Fallback to simple extraction
   const education = [];
   const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
   
@@ -265,8 +352,16 @@ function extractEducation(text) {
     /m\.?tech/i
   ];
   
+  const nonEducationKeywords = ['email', 'phone', 'github', 'linkedin', 'contact', 'address'];
+  
   for (const line of lines) {
-    if (degreePatterns.some(pattern => pattern.test(line))) {
+    const lower = line.toLowerCase();
+    // Skip if contains non-education keywords
+    if (nonEducationKeywords.some(kw => lower.includes(kw))) {
+      continue;
+    }
+    
+    if (degreePatterns.some(pattern => pattern.test(line)) && line.length > 10) {
       education.push(line);
     }
   }

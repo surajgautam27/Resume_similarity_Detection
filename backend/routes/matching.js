@@ -28,48 +28,28 @@ router.post('/job/:jobId', auth, async (req, res) => {
 
     const matches = [];
 
+    // Process resumes with error handling and memory protection
     for (const resume of resumes) {
-      const matchResult = calculateWeightedSimilarity(job, resume);
-      
-      // Create or update match record
-      let match = await Match.findOne({ job: jobId, resume: resume._id });
-      
-      if (match) {
-        // Update existing match
-        match.score = matchResult.score;
-        match.breakdown = {
-          skills: {
-            score: matchResult.breakdown.skillsSimilarity,
-            matched: [],
-            missing: []
-          },
-          experience: {
-            score: matchResult.breakdown.experienceSimilarity,
-            yearsRequired: 0,
-            yearsFound: resume.experience || 0
-          },
-          education: {
-            score: matchResult.breakdown.educationSimilarity,
-            matched: [],
-            missing: []
-          },
-          keywords: {
-            score: matchResult.breakdown.keywordSimilarity,
-            matched: [],
-            missing: []
-          },
-          cosineSimilarity: matchResult.breakdown.cosineSimilarity,
-          tfidfSimilarity: matchResult.breakdown.tfidfSimilarity
-        };
-        match.status = 'pending';
-        await match.save();
-      } else {
-        // Create new match
-        match = new Match({
-          job: jobId,
-          resume: resume._id,
-          score: matchResult.score,
-          breakdown: {
+      try {
+        // Limit extractedText size to prevent memory issues
+        if (resume && resume.extractedText && resume.extractedText.length > 50000) {
+          resume.extractedText = resume.extractedText.substring(0, 50000);
+        }
+        
+        if (!resume || !resume._id) {
+          console.warn('Invalid resume found, skipping');
+          continue;
+        }
+        
+        const matchResult = calculateWeightedSimilarity(job, resume);
+        
+        // Create or update match record
+        let match = await Match.findOne({ job: jobId, resume: resume._id });
+        
+        if (match) {
+          // Update existing match
+          match.score = matchResult.score;
+          match.breakdown = {
             skills: {
               score: matchResult.breakdown.skillsSimilarity,
               matched: [],
@@ -92,22 +72,83 @@ router.post('/job/:jobId', auth, async (req, res) => {
             },
             cosineSimilarity: matchResult.breakdown.cosineSimilarity,
             tfidfSimilarity: matchResult.breakdown.tfidfSimilarity
-          }
-        });
-        await match.save();
-      }
+          };
+          match.status = 'pending';
+          await match.save();
+        } else {
+          // Create new match
+          match = new Match({
+            job: jobId,
+            resume: resume._id,
+            score: matchResult.score,
+            breakdown: {
+              skills: {
+                score: matchResult.breakdown.skillsSimilarity,
+                matched: [],
+                missing: []
+              },
+              experience: {
+                score: matchResult.breakdown.experienceSimilarity,
+                yearsRequired: 0,
+                yearsFound: resume.experience || 0
+              },
+              education: {
+                score: matchResult.breakdown.educationSimilarity,
+                matched: [],
+                missing: []
+              },
+              keywords: {
+                score: matchResult.breakdown.keywordSimilarity,
+                matched: [],
+                missing: []
+              },
+              cosineSimilarity: matchResult.breakdown.cosineSimilarity,
+              tfidfSimilarity: matchResult.breakdown.tfidfSimilarity
+            }
+          });
+          await match.save();
+        }
 
-      matches.push({
-        resumeId: resume._id,
-        candidateName: resume.candidate.name,
-        score: matchResult.score,
-        breakdown: matchResult.breakdown,
-        matchId: match._id
-      });
+        const score = matchResult?.score ?? 0;
+        matches.push({
+          resumeId: resume._id,
+          candidateName: resume.candidate?.name || 'Unknown',
+          score: Math.min(100, Math.max(0, score)), // Ensure 0-100 range
+          breakdown: matchResult?.breakdown || {},
+          matchId: match._id
+        });
+      } catch (error) {
+        console.error('Error processing resume in matching:', resume?._id, error.message);
+        // Still add the match with score 0 to avoid losing data
+        try {
+          matches.push({
+            resumeId: resume?._id || null,
+            candidateName: resume?.candidate?.name || 'Unknown',
+            score: 0,
+            breakdown: {},
+            matchId: null
+          });
+        } catch (pushError) {
+          console.error('Error adding failed match:', pushError.message);
+          // Skip this resume if we can't even add it to matches
+        }
+      }
     }
 
-    // Sort matches by score (highest first)
-    matches.sort((a, b) => b.score - a.score);
+    // Sort matches by score (highest first) with safety checks
+    matches.sort((a, b) => {
+      try {
+        const scoreA = a?.score ?? 0;
+        const scoreB = b?.score ?? 0;
+        // Handle NaN cases
+        if (isNaN(scoreA)) return 1;
+        if (isNaN(scoreB)) return -1;
+        return scoreB - scoreA;
+      } catch (error) {
+        console.error('Error in sort comparison:', error.message);
+        return 0;
+      }
+    });
 
     res.json({
       message: `Matched ${matches.length} resumes to job using advanced similarity algorithms`,
@@ -332,16 +373,46 @@ router.post('/adhoc', auth, async (req, res) => {
 
     const jobText = `${job.title} ${job.description}`;
     const matches = resumes.map(resume => {
-      const cosine = calculateCosineSimilarity(jobText, resume.extractedText);
-      return {
-        resumeId: resume._id,
-        candidateName: resume.candidate?.name || resume.originalName || 'Unnamed Resume',
-        cosineSimilarity: Math.round(cosine * 100), // as percentage
-      };
-    });
+      try {
+        if (!resume || !resume.extractedText) {
+          return {
+            resumeId: resume?._id || null,
+            candidateName: resume?.candidate?.name || resume?.originalName || 'Unnamed Resume',
+            cosineSimilarity: 0,
+          };
+        }
+        const cosine = calculateCosineSimilarity(jobText, resume.extractedText);
+        // Ensure cosine similarity is in 0-1 range, then convert to percentage
+        const safeCosine = Math.min(1.0, Math.max(0, cosine));
+        return {
+          resumeId: resume._id,
+          candidateName: resume.candidate?.name || resume.originalName || 'Unnamed Resume',
+          cosineSimilarity: Math.round(Math.min(100, safeCosine * 100)), // Guaranteed 0-100
+        };
+      } catch (error) {
+        console.error('Error calculating cosine similarity for resume:', resume?._id, error.message);
+        return {
+          resumeId: resume?._id || null,
+          candidateName: resume?.candidate?.name || resume?.originalName || 'Unnamed Resume',
+          cosineSimilarity: 0,
+        };
+      }
+    }).filter(match => match !== null);
 
-    // Sort by similarity descending
-    matches.sort((a, b) => b.cosineSimilarity - a.cosineSimilarity);
+    // Sort by similarity descending with safety checks
+    matches.sort((a, b) => {
+      try {
+        const simA = a?.cosineSimilarity ?? 0;
+        const simB = b?.cosineSimilarity ?? 0;
+        // Handle NaN cases
+        if (isNaN(simA)) return 1;
+        if (isNaN(simB)) return -1;
+        return simB - simA;
+      } catch (error) {
+        console.error('Error in sort comparison:', error.message);
+        return 0;
+      }
+    });
 
     res.json({
       message: `Compared ${matches.length} resumes to job description using cosine similarity`,

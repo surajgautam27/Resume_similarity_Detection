@@ -12,6 +12,7 @@ const { parseResumeWithAI } = require('../utils/aiResumeParser');
 const { parseResumeEnhanced } = require('../utils/advancedResumeParser');
 const { parseResumeWithPyresparser, isPyresparserAvailable } = require('../utils/pyresParserWrapper');
 const { parseResumeStructured } = require('../utils/structuredResumeParser');
+const { parseEducationSection } = require('../utils/educationParser');
 
 const fsPromises = fs.promises;
 
@@ -103,10 +104,84 @@ const formatYearRange = (start, end) => {
   return startVal || endVal;
 };
 
+const parseYearNumber = (value) => {
+  if (!value) return undefined;
+  if (typeof value === 'number') {
+    const year = Math.round(value);
+    return (year >= 1900 && year <= 2100) ? year : undefined;
+  }
+  if (value instanceof Date && !isNaN(value)) {
+    return value.getFullYear();
+  }
+  const text = String(value).trim();
+  const yearMatch = text.match(/\b(19|20)\d{2}\b/);
+  if (yearMatch) {
+    const year = parseInt(yearMatch[0]);
+    return (year >= 1900 && year <= 2100) ? year : undefined;
+  }
+  return undefined;
+};
+
 const normalizeEducationEntries = (entries = []) => {
+  const isValidEducationString = (str) => {
+    if (!str || str.length < 5) return false;
+    const lower = str.toLowerCase();
+    
+    // Check for contact info
+    if (looksLikeContactInfo(str)) return false;
+    
+    // Must have education keyword or be reasonably long
+    if (!containsEducationKeyword(str) && str.length < 10) return false;
+    
+    // Check for common non-education patterns
+    if (/^email|^phone|^contact|^address|^github|^linkedin/i.test(str)) return false;
+    
+    return true;
+  };
+  
   return mapEducationEntries(entries)
     .map(entry => {
       if (!entry) return null;
+      
+      // If entry is already structured, validate and format it
+      if (typeof entry === 'object' && (entry.school || entry.degree || entry.field)) {
+        const normalized = {
+          school: entry.school?.trim() || '',
+          degree: entry.degree?.trim() || '',
+          field: entry.field?.trim() || '',
+          startYear: parseYearNumber(entry.startYear),
+          endYear: parseYearNumber(entry.endYear)
+        };
+        
+        // Validate years
+        if (normalized.startYear && normalized.endYear && normalized.startYear > normalized.endYear) {
+          const temp = normalized.startYear;
+          normalized.startYear = normalized.endYear;
+          normalized.endYear = temp;
+        }
+        
+        // Validate years are reasonable
+        if (normalized.startYear && (normalized.startYear < 1900 || normalized.startYear > 2100)) {
+          normalized.startYear = undefined;
+        }
+        if (normalized.endYear && (normalized.endYear < 1900 || normalized.endYear > 2100)) {
+          normalized.endYear = undefined;
+        }
+        
+        // Clean up
+        normalized.school = normalized.school.replace(/\s+/g, ' ').trim();
+        normalized.degree = normalized.degree.replace(/\s+/g, ' ').trim();
+        normalized.field = normalized.field.replace(/\s+/g, ' ').trim();
+        
+        // Validate the entry
+        const combined = `${normalized.school} ${normalized.degree} ${normalized.field}`.toLowerCase();
+        if (looksLikeContactInfo(combined)) return null;
+        if (!normalized.school && !normalized.degree && !normalized.field) return null;
+        
+        return normalized;
+      }
+      
+      // If entry is a string, convert to structured format
       const parts = [];
       if (entry.degree && entry.field) {
         parts.push(`${entry.degree} in ${entry.field}`);
@@ -122,15 +197,27 @@ const normalizeEducationEntries = (entries = []) => {
       }
       const formatted = parts.join(' - ').trim();
       const fallback = formatted || entry.school || '';
-      if (!fallback) return null;
-      if (looksLikeContactInfo(fallback)) return null;
-      if (!containsEducationKeyword(fallback) && fallback.length < 5) {
-        return null;
-      }
-      return fallback;
+      
+      if (!fallback || !isValidEducationString(fallback)) return null;
+      
+      // Return structured format
+      return {
+        school: entry.school?.trim() || fallback.split(' - ')[fallback.split(' - ').length - 1] || '',
+        degree: entry.degree?.trim() || '',
+        field: entry.field?.trim() || '',
+        startYear: parseYearNumber(entry.startYear),
+        endYear: parseYearNumber(entry.endYear)
+      };
     })
     .filter(Boolean)
-    .map(entry => (typeof entry === 'string' ? entry.trim() : entry));
+    .filter(entry => {
+      // Final validation - ensure entry has meaningful content
+      const hasContent = entry.school || entry.degree || entry.field;
+      if (!hasContent) return false;
+      
+      const combined = `${entry.school || ''} ${entry.degree || ''} ${entry.field || ''}`.toLowerCase();
+      return !looksLikeContactInfo(combined);
+    });
 };
 
 const syncUserProfileFromResume = async (userId, resumeDoc) => {
@@ -275,7 +362,7 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
       try {
         const isPyresAvailable = await isPyresparserAvailable();
         if (isPyresAvailable) {
-          pyresparserData = await parseResumeWithPyresparser(filePath);
+          pyresparserData = await parseResumeWithPyresparser(req.file.path);
           if (pyresparserData) {
             console.log('Pyresparser parsing successful');
           }
@@ -433,48 +520,161 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
         educationCount: educationEntries.length
       });
     } else {
-      // Fallback to basic parser
-      candidateInfo = extractCandidateInfo(extractedText);
-      structuredDetails = extractResumeDetails(extractedText);
+      // Fallback to basic parser - ensure we always get some data
+      try {
+        candidateInfo = extractCandidateInfo(extractedText);
+        structuredDetails = extractResumeDetails(extractedText);
+        
+        const {
+          education: candidateEducation,
+          languages: candidateLanguages,
+          certifications: candidateCertifications,
+          experience: candidateExperience,
+          ...candidateBasicsTemp
+        } = candidateInfo;
+        
+        candidateBasics = candidateBasicsTemp;
       
-      const {
-        education: candidateEducation,
-        languages: candidateLanguages,
-        certifications: candidateCertifications,
-        experience: candidateExperience,
-        ...candidateBasicsTemp
-      } = candidateInfo;
-      
-      candidateBasics = candidateBasicsTemp;
+        // Extract skills
+        skills = extractSkills(extractedText);
+
+        languages = Array.from(
+          new Set([...(candidateLanguages || []), ...(structuredDetails.languages || [])])
+        );
+
+        educationEntries = structuredDetails.educationEntries.length > 0
+          ? structuredDetails.educationEntries
+          : (candidateEducation || []);
+
+        certificationEntries = structuredDetails.certificationEntries.length > 0
+          ? structuredDetails.certificationEntries
+          : (candidateCertifications || []);
+
+        projects = structuredDetails.projectEntries || [];
+        highlights = structuredDetails.highlights || [];
+        summaryText = structuredDetails.summary || '';
+        
+        // Use calculated experience from dates if available, otherwise use text-based extraction
+        experienceYears = structuredDetails.calculatedExperience > 0
+          ? structuredDetails.calculatedExperience
+          : (typeof candidateExperience === 'number' && candidateExperience > 0 ? candidateExperience : 0);
+        
+        console.log('Extracted via Basic Parser (fallback)');
+      } catch (parseError) {
+        console.error('Basic parser also failed, using minimal extraction:', parseError.message);
+        // Minimal fallback - extract at least filename and basic info
+        candidateBasics = {
+          name: req.file.originalname.replace(/\.pdf$/i, '').replace(/[-_]/g, ' ').trim() || 'Unknown',
+          email: '',
+          phone: '',
+          location: ''
+        };
+        skills = [];
+        languages = [];
+        educationEntries = [];
+        certificationEntries = [];
+        projects = [];
+        highlights = [];
+        summaryText = extractedText.substring(0, 500) || '';
+        experienceYears = 0;
+        workExperience = [];
+        achievements = [];
+      }
+    }
     
-    // Extract skills
-      skills = extractSkills(extractedText);
-
-      languages = Array.from(
-        new Set([...(candidateLanguages || []), ...(structuredDetails.languages || [])])
-      );
-
-      educationEntries = structuredDetails.educationEntries.length > 0
-        ? structuredDetails.educationEntries
-        : (candidateEducation || []);
-
-      certificationEntries = structuredDetails.certificationEntries.length > 0
-        ? structuredDetails.certificationEntries
-        : (candidateCertifications || []);
-
-      projects = structuredDetails.projectEntries || [];
-      highlights = structuredDetails.highlights || [];
-      summaryText = structuredDetails.summary || '';
-      
-      // Use calculated experience from dates if available, otherwise use text-based extraction
-      experienceYears = structuredDetails.calculatedExperience > 0
-        ? structuredDetails.calculatedExperience
-        : (typeof candidateExperience === 'number' && candidateExperience > 0 ? candidateExperience : 0);
-      
-      console.log('Extracted via Basic Parser (fallback)');
+    // Ensure we always have at least minimal data
+    if (!candidateBasics || !candidateBasics.name) {
+      candidateBasics = candidateBasics || {};
+      candidateBasics.name = candidateBasics.name || req.file.originalname.replace(/\.pdf$/i, '').replace(/[-_]/g, ' ').trim() || 'Unknown';
+    }
+    
+    // Always use advanced education parser to ensure best results
+    // It handles multi-line entries, structured data, and filters contact info
+    console.log('Running advanced education parser on extracted text...');
+    try {
+      const advancedEducation = parseEducationSection(extractedText);
+      if (advancedEducation.length > 0) {
+        // Use advanced parser results if they're better (more entries or more structured)
+        const currentCount = educationEntries.length;
+        const advancedCount = advancedEducation.length;
+        const currentHasStructure = educationEntries.some(e => typeof e === 'object' && (e.school || e.degree || e.field));
+        const advancedHasStructure = advancedEducation.some(e => typeof e === 'object' && (e.school || e.degree || e.field));
+        
+        // Prefer advanced parser if:
+        // 1. It has more entries, OR
+        // 2. Current entries are invalid/empty, OR
+        // 3. Advanced has better structure
+        if (advancedCount > currentCount || 
+            currentCount === 0 || 
+            (advancedHasStructure && !currentHasStructure) ||
+            educationEntries.some(e => {
+              const str = typeof e === 'string' ? e.toLowerCase() : JSON.stringify(e).toLowerCase();
+              return str.length < 5 || 
+                     /email|phone|github|linkedin|contact|address|@|http/i.test(str) ||
+                     (typeof e === 'string' && e.split(' ').length < 2);
+            })) {
+          educationEntries = advancedEducation;
+          console.log('Using advanced education parser results:', advancedEducation.length, 'entries');
+        } else {
+          // Merge both - advanced parser might have better structured data
+          const merged = [...educationEntries];
+          advancedEducation.forEach(advEdu => {
+            const key = `${advEdu.degree || ''}|${advEdu.school || ''}|${advEdu.field || ''}`.toLowerCase();
+            const exists = merged.some(e => {
+              const eKey = typeof e === 'object' 
+                ? `${e.degree || ''}|${e.school || ''}|${e.field || ''}`.toLowerCase()
+                : String(e).toLowerCase();
+              return eKey === key || eKey.includes(key) || key.includes(eKey);
+            });
+            if (!exists) merged.push(advEdu);
+          });
+          educationEntries = merged;
+          console.log('Merged education entries:', merged.length, 'total');
+        }
+      }
+    } catch (eduError) {
+      console.error('Advanced education parser failed, using original results:', eduError.message);
+    }
+    
+    // Ensure extractedText is never empty
+    if (!extractedText || extractedText.trim().length < 10) {
+      extractedText = [
+        candidateBasics.name,
+        summaryText,
+        skills.join(' '),
+        educationEntries.map(e => typeof e === 'string' ? e : (e.school || e.degree || '')).join(' ')
+      ].filter(Boolean).join(' ') || req.file.originalname;
     }
 
     educationEntries = normalizeEducationEntries(educationEntries || []);
+
+    // Store the raw parsed data from whichever parser succeeded
+    let parsedDataToStore = null;
+    if (structuredParsedData) {
+      parsedDataToStore = {
+        source: 'structured',
+        data: structuredParsedData,
+        parsingMethod: 'Structured'
+      };
+    } else if (pyresparserData) {
+      parsedDataToStore = {
+        source: 'pyresparser',
+        data: pyresparserData,
+        parsingMethod: 'Pyresparser'
+      };
+    } else if (aiParsedData) {
+      parsedDataToStore = {
+        source: 'ai',
+        data: aiParsedData,
+        parsingMethod: 'AI'
+      };
+    } else if (enhancedParsedData) {
+      parsedDataToStore = {
+        source: 'enhanced',
+        data: enhancedParsedData,
+        parsingMethod: 'Enhanced'
+      };
+    }
 
     console.log('Final extracted info:', {
       candidate: candidateBasics,
@@ -485,7 +685,8 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
       certificationEntries: certificationEntries.length,
       summaryText: summaryText ? summaryText.substring(0, 100) + '...' : '',
       experienceYears,
-      parsingMethod: structuredParsedData ? 'Structured' : pyresparserData ? 'Pyresparser' : aiParsedData ? 'AI' : enhancedParsedData ? 'Enhanced' : 'Basic'
+      parsingMethod: structuredParsedData ? 'Structured' : pyresparserData ? 'Pyresparser' : aiParsedData ? 'AI' : enhancedParsedData ? 'Enhanced' : 'Basic',
+      hasParsedData: !!parsedDataToStore
     });
 
     // Create resume record
@@ -507,6 +708,7 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
       highlights,
       workExperience: workExperience || [],
       achievements: achievements || [],
+      parsedData: parsedDataToStore,
       uploadedBy: req.user.userId,
       status: 'processed',
       processed: true,
@@ -605,7 +807,7 @@ router.post('/upload-multiple', auth, upload.array('resumes', 10), async (req, r
           try {
             const isPyresAvailable = await isPyresparserAvailable();
             if (isPyresAvailable) {
-              pyresparserData = await parseResumeWithPyresparser(filePath);
+              pyresparserData = await parseResumeWithPyresparser(file.path);
             }
           } catch (error) {
             console.log(`Pyresparser parsing failed for ${file.originalname}, trying AI parser`);
@@ -753,7 +955,76 @@ router.post('/upload-multiple', auth, upload.array('resumes', 10), async (req, r
             : (typeof candidateExperience === 'number' && candidateExperience > 0 ? candidateExperience : 0);
         }
 
+        // Always use advanced education parser to ensure best results
+        if (extractedText) {
+          try {
+            const advancedEducation = parseEducationSection(extractedText);
+            if (advancedEducation.length > 0) {
+              // Use advanced parser results if they're better
+              const currentCount = (educationEntries || []).length;
+              const advancedCount = advancedEducation.length;
+              const currentHasStructure = (educationEntries || []).some(e => typeof e === 'object' && (e.school || e.degree || e.field));
+              const advancedHasStructure = advancedEducation.some(e => typeof e === 'object' && (e.school || e.degree || e.field));
+              
+              if (advancedCount > currentCount || 
+                  currentCount === 0 || 
+                  (advancedHasStructure && !currentHasStructure) ||
+                  (educationEntries || []).some(e => {
+                    const str = typeof e === 'string' ? e.toLowerCase() : JSON.stringify(e).toLowerCase();
+                    return str.length < 5 || 
+                           /email|phone|github|linkedin|contact|address|@|http/i.test(str);
+                  })) {
+                educationEntries = advancedEducation;
+              } else {
+                // Merge both
+                const merged = [...(educationEntries || [])];
+                advancedEducation.forEach(advEdu => {
+                  const key = `${advEdu.degree || ''}|${advEdu.school || ''}|${advEdu.field || ''}`.toLowerCase();
+                  const exists = merged.some(e => {
+                    const eKey = typeof e === 'object' 
+                      ? `${e.degree || ''}|${e.school || ''}|${e.field || ''}`.toLowerCase()
+                      : String(e).toLowerCase();
+                    return eKey === key || eKey.includes(key) || key.includes(eKey);
+                  });
+                  if (!exists) merged.push(advEdu);
+                });
+                educationEntries = merged;
+              }
+            }
+          } catch (eduError) {
+            console.error('Advanced education parser failed:', eduError.message);
+          }
+        }
+        
         educationEntries = normalizeEducationEntries(educationEntries || []);
+
+        // Store the raw parsed data from whichever parser succeeded
+        let parsedDataToStore = null;
+        if (structuredParsedData) {
+          parsedDataToStore = {
+            source: 'structured',
+            data: structuredParsedData,
+            parsingMethod: 'Structured'
+          };
+        } else if (pyresparserData) {
+          parsedDataToStore = {
+            source: 'pyresparser',
+            data: pyresparserData,
+            parsingMethod: 'Pyresparser'
+          };
+        } else if (aiParsedData) {
+          parsedDataToStore = {
+            source: 'ai',
+            data: aiParsedData,
+            parsingMethod: 'AI'
+          };
+        } else if (enhancedParsedData) {
+          parsedDataToStore = {
+            source: 'enhanced',
+            data: enhancedParsedData,
+            parsingMethod: 'Enhanced'
+          };
+        }
 
         // Create resume record
         const resume = new Resume({
@@ -774,6 +1045,7 @@ router.post('/upload-multiple', auth, upload.array('resumes', 10), async (req, r
           highlights,
           workExperience: workExperience || [],
           achievements: achievements || [],
+          parsedData: parsedDataToStore,
           uploadedBy: req.user.userId,
           status: 'processed',
           processed: true,
@@ -955,6 +1227,322 @@ router.get('/:id/file', auth, async (req, res) => {
   } catch (error) {
     console.error('View resume file error:', error);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update/Re-parse resume
+router.put('/:id/reparse', auth, async (req, res) => {
+  try {
+    const resume = await Resume.findById(req.params.id);
+    
+    if (!resume) {
+      return res.status(404).json({ error: 'Resume not found' });
+    }
+
+    // Check if user has permission to update this resume
+    if (resume.uploadedBy.toString() !== req.user.userId && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Not authorized to update this resume' });
+    }
+
+    // Check if file still exists
+    const resolvedPath = path.isAbsolute(resume.filePath)
+      ? resume.filePath
+      : path.join(__dirname, '..', resume.filePath);
+    
+    try {
+      await fsPromises.access(resolvedPath);
+    } catch (accessError) {
+      return res.status(404).json({ error: 'Resume file not found on server' });
+    }
+
+    const processingStartedAt = Date.now();
+
+    // Read and parse PDF
+    const pdfBuffer = await fsPromises.readFile(resolvedPath);
+    const pdfData = await pdfParse(pdfBuffer);
+    const extractedText = pdfData.text;
+
+    // Try parsers in order of accuracy: Structured -> Pyresparser -> AI -> Enhanced -> Basic
+    let structuredParsedData = null;
+    let pyresparserData = null;
+    let aiParsedData = null;
+    let enhancedParsedData = null;
+    
+    // First try structured parser
+    try {
+      const structuredResult = parseResumeStructured(extractedText);
+      if (structuredResult.success) {
+        structuredParsedData = structuredResult.data;
+      }
+    } catch (error) {
+      console.log('Structured parsing failed, trying pyresparser:', error.message);
+    }
+
+    // If structured parsing failed, try pyresparser
+    if (!structuredParsedData) {
+      try {
+        const isPyresAvailable = await isPyresparserAvailable();
+        if (isPyresAvailable) {
+          pyresparserData = await parseResumeWithPyresparser(resolvedPath);
+        }
+      } catch (error) {
+        console.log('Pyresparser parsing failed, trying AI parser:', error.message);
+      }
+    }
+
+    // If both failed, try AI parsing
+    if (!structuredParsedData && !pyresparserData) {
+      try {
+        aiParsedData = await parseResumeWithAI(extractedText);
+      } catch (error) {
+        console.log('AI parsing failed, trying enhanced parser:', error.message);
+      }
+    }
+
+    // If all failed, try enhanced parser
+    if (!structuredParsedData && !pyresparserData && !aiParsedData) {
+      try {
+        enhancedParsedData = parseResumeEnhanced(extractedText);
+      } catch (error) {
+        console.log('Enhanced parsing failed, using basic parser:', error.message);
+      }
+    }
+
+    let candidateInfo, structuredDetails, skills, languages, educationEntries, 
+        certificationEntries, projects, highlights, summaryText, experienceYears, candidateBasics, workExperience, achievements;
+
+    if (structuredParsedData) {
+      candidateBasics = structuredParsedData.candidate;
+      skills = structuredParsedData.skills || [];
+      languages = structuredParsedData.languages || [];
+      summaryText = structuredParsedData.summary || '';
+      experienceYears = structuredParsedData.experience || 0;
+      educationEntries = structuredParsedData.education || [];
+      certificationEntries = structuredParsedData.certifications || [];
+      projects = structuredParsedData.projects || [];
+      workExperience = structuredParsedData.workExperience || [];
+      achievements = structuredParsedData.achievements || [];
+      highlights = skills.slice(0, 10);
+    } else if (pyresparserData) {
+      candidateBasics = pyresparserData.candidate;
+      skills = pyresparserData.skills || [];
+      languages = pyresparserData.languages || [];
+      summaryText = pyresparserData.summary || '';
+      experienceYears = pyresparserData.experience || 0;
+      
+      educationEntries = [];
+      if (pyresparserData.education?.length) {
+        educationEntries = pyresparserData.education;
+      } else if (pyresparserData.degrees?.length || pyresparserData.college_names?.length) {
+        const degrees = pyresparserData.degrees || [];
+        const colleges = pyresparserData.college_names || [];
+        for (let i = 0; i < Math.max(degrees.length, colleges.length); i++) {
+          const parts = [];
+          if (degrees[i]) parts.push(degrees[i]);
+          if (colleges[i]) parts.push(`at ${colleges[i]}`);
+          if (parts.length > 0) educationEntries.push(parts.join(' '));
+        }
+      }
+      
+      certificationEntries = pyresparserData.certifications || [];
+      projects = pyresparserData.projects || [];
+      highlights = skills.slice(0, 20);
+    } else if (aiParsedData) {
+      candidateBasics = {
+        name: aiParsedData.name || '',
+        email: aiParsedData.email || '',
+        phone: aiParsedData.phone || '',
+        location: aiParsedData.location || ''
+      };
+      
+      skills = aiParsedData.skills || [];
+      languages = aiParsedData.languages || [];
+      summaryText = aiParsedData.summary || '';
+      experienceYears = aiParsedData.experienceYears || 0;
+      
+      const experienceEntries = (aiParsedData.experience || []).map(exp => {
+        const dateRange = exp.endDate === 'Present' || exp.endDate === 'Current' || !exp.endDate
+          ? `${exp.startDate} - Present`
+          : `${exp.startDate} - ${exp.endDate}`;
+        return `${exp.role} at ${exp.company} (${dateRange})${exp.description ? ': ' + exp.description : ''}`;
+      });
+      
+      educationEntries = (aiParsedData.education || []).map(edu => {
+        const parts = [edu.degree, edu.field, edu.school].filter(Boolean);
+        if (edu.startYear || edu.endYear) {
+          parts.push(`(${edu.startYear || ''}${edu.endYear ? '-' + edu.endYear : ''})`);
+        }
+        return parts.join(' ');
+      });
+      
+      certificationEntries = aiParsedData.certifications || [];
+      projects = aiParsedData.projects || [];
+      highlights = [];
+    } else if (enhancedParsedData) {
+      candidateBasics = enhancedParsedData.candidate;
+      skills = enhancedParsedData.skills;
+      languages = enhancedParsedData.languages;
+      summaryText = enhancedParsedData.summary;
+      experienceYears = enhancedParsedData.experience;
+      educationEntries = enhancedParsedData.education;
+      certificationEntries = enhancedParsedData.certifications;
+      projects = enhancedParsedData.projects;
+      highlights = enhancedParsedData.highlights;
+    } else {
+      try {
+        candidateInfo = extractCandidateInfo(extractedText);
+        structuredDetails = extractResumeDetails(extractedText);
+        
+        const {
+          education: candidateEducation,
+          languages: candidateLanguages,
+          certifications: candidateCertifications,
+          experience: candidateExperience,
+          ...candidateBasicsTemp
+        } = candidateInfo;
+        
+        candidateBasics = candidateBasicsTemp;
+      
+        skills = extractSkills(extractedText);
+
+        languages = Array.from(
+          new Set([...(candidateLanguages || []), ...(structuredDetails.languages || [])])
+        );
+
+        educationEntries = structuredDetails.educationEntries.length > 0
+          ? structuredDetails.educationEntries
+          : (candidateEducation || []);
+
+        certificationEntries = structuredDetails.certificationEntries.length > 0
+          ? structuredDetails.certificationEntries
+          : (candidateCertifications || []);
+
+        projects = structuredDetails.projectEntries || [];
+        highlights = structuredDetails.highlights || [];
+        summaryText = structuredDetails.summary || '';
+        
+        experienceYears = structuredDetails.calculatedExperience > 0
+          ? structuredDetails.calculatedExperience
+          : (typeof candidateExperience === 'number' && candidateExperience > 0 ? candidateExperience : 0);
+      } catch (parseError) {
+        console.error('Basic parser also failed:', parseError.message);
+        return res.status(500).json({ error: 'Failed to parse resume' });
+      }
+    }
+    
+    // Always use advanced education parser
+    try {
+      const advancedEducation = parseEducationSection(extractedText);
+      if (advancedEducation.length > 0) {
+        const currentCount = educationEntries.length;
+        const advancedCount = advancedEducation.length;
+        const currentHasStructure = educationEntries.some(e => typeof e === 'object' && (e.school || e.degree || e.field));
+        const advancedHasStructure = advancedEducation.some(e => typeof e === 'object' && (e.school || e.degree || e.field));
+        
+        if (advancedCount > currentCount || 
+            currentCount === 0 || 
+            (advancedHasStructure && !currentHasStructure) ||
+            educationEntries.some(e => {
+              const str = typeof e === 'string' ? e.toLowerCase() : JSON.stringify(e).toLowerCase();
+              return str.length < 5 || 
+                     /email|phone|github|linkedin|contact|address|@|http/i.test(str) ||
+                     (typeof e === 'string' && e.split(' ').length < 2);
+            })) {
+          educationEntries = advancedEducation;
+        } else {
+          const merged = [...educationEntries];
+          advancedEducation.forEach(advEdu => {
+            const key = `${advEdu.degree || ''}|${advEdu.school || ''}|${advEdu.field || ''}`.toLowerCase();
+            const exists = merged.some(e => {
+              const eKey = typeof e === 'object' 
+                ? `${e.degree || ''}|${e.school || ''}|${e.field || ''}`.toLowerCase()
+                : String(e).toLowerCase();
+              return eKey === key || eKey.includes(key) || key.includes(eKey);
+            });
+            if (!exists) merged.push(advEdu);
+          });
+          educationEntries = merged;
+        }
+      }
+    } catch (eduError) {
+      console.error('Advanced education parser failed:', eduError.message);
+    }
+    
+    educationEntries = normalizeEducationEntries(educationEntries || []);
+
+    // Store the raw parsed data
+    let parsedDataToStore = null;
+    if (structuredParsedData) {
+      parsedDataToStore = {
+        source: 'structured',
+        data: structuredParsedData,
+        parsingMethod: 'Structured'
+      };
+    } else if (pyresparserData) {
+      parsedDataToStore = {
+        source: 'pyresparser',
+        data: pyresparserData,
+        parsingMethod: 'Pyresparser'
+      };
+    } else if (aiParsedData) {
+      parsedDataToStore = {
+        source: 'ai',
+        data: aiParsedData,
+        parsingMethod: 'AI'
+      };
+    } else if (enhancedParsedData) {
+      parsedDataToStore = {
+        source: 'enhanced',
+        data: enhancedParsedData,
+        parsingMethod: 'Enhanced'
+      };
+    }
+
+    // Update resume with new parsed data
+    resume.extractedText = extractedText;
+    resume.candidate = candidateBasics;
+    resume.skills = skills;
+    resume.experience = experienceYears;
+    resume.education = educationEntries;
+    resume.languages = languages;
+    resume.certifications = certificationEntries;
+    resume.projects = projects;
+    resume.summary = summaryText ? summaryText.substring(0, 2000) : '';
+    resume.highlights = highlights;
+    resume.workExperience = workExperience || [];
+    resume.achievements = achievements || [];
+    resume.parsedData = parsedDataToStore;
+    resume.status = 'processed';
+    resume.processed = true;
+    resume.metadata.processingTime = Date.now() - processingStartedAt;
+    resume.metadata.wordCount = extractedText.split(/\s+/).length;
+    resume.metadata.pageCount = pdfData.numpages;
+
+    await resume.save();
+    await syncUserProfileFromResume(req.user.userId, resume);
+
+    res.json({
+      message: 'Resume re-parsed and updated successfully',
+      resume: {
+        id: resume._id,
+        filename: resume.filename,
+        originalName: resume.originalName,
+        candidate: resume.candidate,
+        skills: resume.skills,
+        summary: resume.summary,
+        education: resume.education,
+        languages: resume.languages,
+        certifications: resume.certifications,
+        highlights: resume.highlights,
+        experience: resume.experience,
+        status: resume.status,
+        metadata: resume.metadata,
+        parsedData: resume.parsedData
+      }
+    });
+  } catch (error) {
+    console.error('Re-parse resume error:', error);
+    res.status(500).json({ error: 'Error re-parsing resume' });
   }
 });
 

@@ -54,7 +54,11 @@ function calculateCosineSimilarity(text1, text2) {
     return 0;
   }
   
-  return dotProduct / (magnitude1 * magnitude2);
+  // Calculate cosine similarity (should be 0-1 for text vectors)
+  const cosine = dotProduct / (magnitude1 * magnitude2);
+  
+  // Safety cap: ensure result is in 0-1 range (should be, but protect against floating point errors)
+  return Math.min(1.0, Math.max(0, cosine));
 }
 
 // Calculate TF-IDF based cosine similarity
@@ -129,7 +133,11 @@ function calculateTFIDFSimilarity(text1, text2) {
     return 0;
   }
   
-  return dotProduct / (magnitude1 * magnitude2);
+  // Calculate TF-IDF cosine similarity (should be 0-1 for text vectors)
+  const cosine = dotProduct / (magnitude1 * magnitude2);
+  
+  // Safety cap: ensure result is in 0-1 range (should be, but protect against floating point errors)
+  return Math.min(1.0, Math.max(0, cosine));
 }
 
 // Calculate Jaccard similarity for skills
@@ -140,63 +148,230 @@ function calculateJaccardSimilarity(set1, set2) {
   return union.size === 0 ? 0 : intersection.size / union.size;
 }
 
+// Build fallback resume text from available data
+function buildResumeText(resume) {
+  const parts = [];
+  
+  if (resume.extractedText && resume.extractedText.trim().length > 50) {
+    return resume.extractedText;
+  }
+  
+  // Build from structured data
+  if (resume.candidate?.name) parts.push(resume.candidate.name);
+  if (resume.summary) parts.push(resume.summary);
+  if (resume.skills && resume.skills.length > 0) {
+    parts.push(resume.skills.join(' '));
+  }
+  if (resume.workExperience && resume.workExperience.length > 0) {
+    parts.push(resume.workExperience.join(' '));
+  }
+  if (resume.education && resume.education.length > 0) {
+    const eduText = resume.education.map(edu => {
+      if (typeof edu === 'string') return edu;
+      return [edu.school, edu.degree, edu.field].filter(Boolean).join(' ');
+    }).join(' ');
+    parts.push(eduText);
+  }
+  if (resume.projects && resume.projects.length > 0) {
+    parts.push(resume.projects.join(' '));
+  }
+  
+  return parts.join(' ').trim() || resume.originalName || '';
+}
+
+// Skills matching with fuzzy matching (exact results)
+function enhanceSkillsMatching(jobSkills, resumeSkills) {
+  const jobSet = new Set(jobSkills.map(s => s.toLowerCase().trim()));
+  const resumeSet = new Set(resumeSkills.map(s => s.toLowerCase().trim()));
+  
+  if (jobSet.size === 0) {
+    return 0; // Exact: 0 if job has no skills to compare
+  }
+  
+  // Exact matches
+  const exactMatches = [...jobSet].filter(skill => resumeSet.has(skill));
+  
+  // Fuzzy matches (partial word matches)
+  let fuzzyMatches = 0;
+  for (const jobSkill of jobSet) {
+    if (exactMatches.includes(jobSkill)) continue;
+    for (const resumeSkill of resumeSet) {
+      if (jobSkill.includes(resumeSkill) || resumeSkill.includes(jobSkill)) {
+        fuzzyMatches++;
+        break;
+      }
+    }
+  }
+  
+  const totalMatches = exactMatches.length + (fuzzyMatches * 0.5);
+  
+  // Calculate match ratio: totalMatches / jobSet.size
+  // This can never exceed 1.0 because totalMatches <= jobSet.size (each job skill matched at most once)
+  const matchRatio = totalMatches / jobSet.size;
+  
+  // Ensure it's in 0-1 range
+  return Math.min(1.0, Math.max(0, matchRatio));
+}
+
 // Calculate weighted similarity based on different criteria
 function calculateWeightedSimilarity(job, resume) {
-  const jobText = `${job.title} ${job.description} ${job.requirements.join(' ')} ${job.skills.join(' ')}`;
-  const resumeText = resume.extractedText;
-  
-  // 1. Cosine similarity for overall text
-  const cosineSimilarity = calculateCosineSimilarity(jobText, resumeText);
-  
-  // 2. TF-IDF similarity for more sophisticated text comparison
-  const tfidfSimilarity = calculateTFIDFSimilarity(jobText, resumeText);
-  
-  // 3. Skills matching using Jaccard similarity
-  const jobSkills = new Set(job.skills.map(skill => skill.toLowerCase()));
-  const resumeSkills = new Set(resume.skills.map(skill => skill.toLowerCase()));
-  const skillsSimilarity = calculateJaccardSimilarity(jobSkills, resumeSkills);
-  
-  // 4. Experience matching
-  const jobExperience = getExperienceLevel(job.experience);
-  const resumeExperience = resume.experience || 0;
-  const experienceSimilarity = calculateExperienceSimilarity(jobExperience, resumeExperience);
-  
-  // 5. Education matching
-  const educationSimilarity = calculateEducationSimilarity(job, resume);
-  
-  // 6. Keyword matching
-  const keywordSimilarity = calculateKeywordSimilarity(jobText, resumeText);
-  
-  // Weighted combination
-  const weights = {
-    cosineSimilarity: 0.25,
-    tfidfSimilarity: 0.20,
-    skillsSimilarity: 0.25,
-    experienceSimilarity: 0.15,
-    educationSimilarity: 0.10,
-    keywordSimilarity: 0.05
-  };
-  
-  const finalScore = (
-    cosineSimilarity * weights.cosineSimilarity * 100 +
-    tfidfSimilarity * weights.tfidfSimilarity * 100 +
-    skillsSimilarity * weights.skillsSimilarity * 100 +
-    experienceSimilarity * weights.experienceSimilarity * 100 +
-    educationSimilarity * weights.educationSimilarity * 100 +
-    keywordSimilarity * weights.keywordSimilarity * 100
-  );
-  
-  return {
-    score: Math.round(finalScore),
-    breakdown: {
-      cosineSimilarity: Math.round(cosineSimilarity * 100),
-      tfidfSimilarity: Math.round(tfidfSimilarity * 100),
-      skillsSimilarity: Math.round(skillsSimilarity * 100),
-      experienceSimilarity: Math.round(experienceSimilarity * 100),
-      educationSimilarity: Math.round(educationSimilarity * 100),
-      keywordSimilarity: Math.round(keywordSimilarity * 100)
+  try {
+    // Validate inputs
+    if (!job || !resume) {
+      console.warn('calculateWeightedSimilarity: Missing job or resume');
+      return {
+        score: 0,
+        breakdown: {
+          cosineSimilarity: 0,
+          tfidfSimilarity: 0,
+          skillsSimilarity: 0,
+          experienceSimilarity: 0,
+          educationSimilarity: 0,
+          keywordSimilarity: 0
+        }
+      };
     }
-  };
+
+    // Build comprehensive job text
+    const jobText = [
+      job.title || '',
+      job.description || '',
+      (job.requirements || []).join(' '),
+      (job.skills || []).join(' '),
+      job.department || '',
+      (job.tags || []).join(' ')
+    ].filter(Boolean).join(' ').toLowerCase();
+    
+    // Build resume text with fallback
+    let resumeText;
+    try {
+      resumeText = buildResumeText(resume).toLowerCase();
+    } catch (error) {
+      console.error('Error building resume text:', error.message);
+      resumeText = '';
+    }
+    
+    // Ensure we have text to work with
+    if (!resumeText || resumeText.trim().length < 10) {
+      // Return exact score: 0 if no data (no enhancements)
+      return {
+        score: 0,
+        breakdown: {
+          cosineSimilarity: 0,
+          tfidfSimilarity: 0,
+          skillsSimilarity: 0,
+          experienceSimilarity: 0,
+          educationSimilarity: 0,
+          keywordSimilarity: 0
+        }
+      };
+    }
+
+    // 1. Cosine similarity for overall text (ensure 0-1 range)
+    const cosineSimilarity = Math.min(1.0, Math.max(0, calculateCosineSimilarity(jobText, resumeText)));
+    
+    // 2. TF-IDF similarity for more sophisticated text comparison (ensure 0-1 range)
+    const tfidfSimilarity = Math.min(1.0, Math.max(0, calculateTFIDFSimilarity(jobText, resumeText)));
+    
+    // 3. Skills matching (exact results, no enhancements)
+    const jobSkills = (job.skills || []).map(s => s.toLowerCase().trim()).filter(Boolean);
+    const resumeSkills = (resume.skills || []).map(s => s.toLowerCase().trim()).filter(Boolean);
+    const skillsSimilarityRaw = jobSkills.length > 0 && resumeSkills.length > 0
+      ? enhanceSkillsMatching(jobSkills, resumeSkills)
+      : 0; // Exact: 0 if no skills to compare
+    const skillsSimilarity = Math.min(1.0, Math.max(0, skillsSimilarityRaw));
+    
+    // 4. Experience matching (exact results, ensure 0-1 range)
+    const jobExperience = getExperienceLevel(job.experience);
+    const resumeExperience = resume.experience || 0;
+    const experienceSimilarityRaw = calculateExperienceSimilarity(jobExperience, resumeExperience);
+    const experienceSimilarity = Math.min(1.0, Math.max(0, experienceSimilarityRaw));
+    
+    // 5. Education matching (exact results, ensure 0-1 range)
+    const educationSimilarityRaw = calculateEducationSimilarity(job, resume);
+    const educationSimilarity = Math.min(1.0, Math.max(0, educationSimilarityRaw));
+    
+    // 6. Keyword matching (exact results, ensure 0-1 range)
+    const keywordSimilarityRaw = calculateKeywordSimilarity(jobText, resumeText);
+    const keywordSimilarity = Math.min(1.0, Math.max(0, keywordSimilarityRaw));
+    
+    // 7. Title matching bonus (0 or 1, not a similarity score)
+    const titleMatchBonus = job.title && resumeText.includes(job.title.toLowerCase()) ? 1 : 0;
+    
+    // Weighted combination - weights must sum to exactly 1.0 to ensure max score is 100
+    // Redistribute weights to account for title bonus
+    const weights = {
+      cosineSimilarity: 0.20,
+      tfidfSimilarity: 0.15,
+      skillsSimilarity: 0.30,
+      experienceSimilarity: 0.15,
+      educationSimilarity: 0.10,
+      keywordSimilarity: 0.05,
+      titleMatch: 0.05
+    };
+    
+    // Verify weights sum to 1.0
+    const weightSum = Object.values(weights).reduce((sum, w) => sum + w, 0);
+    if (Math.abs(weightSum - 1.0) > 0.001) {
+      console.warn('Weights do not sum to 1.0:', weightSum);
+    }
+    
+    // Calculate weighted score: each component is (similarity * weight * 100)
+    // Maximum possible: if all similarities = 1.0, score = 1.0 * 1.0 * 100 = 100
+    const weightedComponents = [
+      cosineSimilarity * weights.cosineSimilarity,
+      tfidfSimilarity * weights.tfidfSimilarity,
+      skillsSimilarity * weights.skillsSimilarity,
+      experienceSimilarity * weights.experienceSimilarity,
+      educationSimilarity * weights.educationSimilarity,
+      keywordSimilarity * weights.keywordSimilarity,
+      titleMatchBonus * weights.titleMatch
+    ];
+    
+    // Sum of weighted components (each is 0-1 range, weights sum to 1.0)
+    // So sum is guaranteed to be 0-1 range, but add safety check
+    const weightedSum = weightedComponents.reduce((sum, val) => {
+      // Ensure each component is in valid range before summing
+      const safeVal = Math.min(1.0, Math.max(0, val));
+      return sum + safeVal;
+    }, 0);
+    
+    // Ensure weightedSum is in 0-1 range (should be, but double-check due to floating point)
+    const safeWeightedSum = Math.min(1.0, Math.max(0, weightedSum));
+    
+    // Convert to 0-100 scale - this is the ONLY place we multiply by 100
+    // Since safeWeightedSum is 0-1, finalScore is guaranteed 0-100
+    const finalScore = safeWeightedSum * 100;
+    
+    // Final safety check - ensure score never exceeds 100 (should be impossible, but defensive)
+    const clampedScore = Math.min(100, Math.max(0, finalScore));
+  
+    return {
+      score: Math.round(clampedScore), // Round to integer, guaranteed 0-100
+      breakdown: {
+        cosineSimilarity: Math.round(Math.min(100, Math.max(0, cosineSimilarity * 100))),
+        tfidfSimilarity: Math.round(Math.min(100, Math.max(0, tfidfSimilarity * 100))),
+        skillsSimilarity: Math.round(Math.min(100, Math.max(0, skillsSimilarity * 100))),
+        experienceSimilarity: Math.round(Math.min(100, Math.max(0, experienceSimilarity * 100))),
+        educationSimilarity: Math.round(Math.min(100, Math.max(0, educationSimilarity * 100))),
+        keywordSimilarity: Math.round(Math.min(100, Math.max(0, keywordSimilarity * 100)))
+      }
+    };
+  } catch (error) {
+    console.error('Error in calculateWeightedSimilarity:', error.message, error.stack);
+    // Return safe default values on error
+    return {
+      score: 0,
+      breakdown: {
+        cosineSimilarity: 0,
+        tfidfSimilarity: 0,
+        skillsSimilarity: 0,
+        experienceSimilarity: 0,
+        educationSimilarity: 0,
+        keywordSimilarity: 0
+      }
+    };
+  }
 }
 
 // Helper function to get experience level
@@ -211,25 +386,60 @@ function getExperienceLevel(level) {
   return experienceMap[level] || 5;
 }
 
-// Calculate experience similarity
+// Calculate experience similarity (exact results, no enhancements)
 function calculateExperienceSimilarity(required, actual) {
+  // Exact calculation: no minimum boosts or fallbacks
+  if (required === 0) {
+    return 0; // Exact: 0 if no experience required (can't calculate similarity)
+  }
+  
   if (actual >= required) {
     return 1.0; // Perfect match
   } else if (actual >= required * 0.7) {
-    return 0.8; // Good match
+    return 0.9; // Good match
   } else if (actual >= required * 0.5) {
-    return 0.6; // Moderate match
+    return 0.75; // Moderate match
+  } else if (actual >= required * 0.3) {
+    return 0.5; // Partial match
   } else {
-    return Math.max(0, actual / required); // Proportional match
+    return actual / required; // Exact ratio, no minimum boost
   }
 }
 
-// Calculate education similarity
+// Calculate education similarity (exact results, no enhancements)
 function calculateEducationSimilarity(job, resume) {
-  const educationKeywords = ['bachelor', 'master', 'phd', 'degree', 'university', 'college'];
-  const jobText = `${job.title} ${job.description}`.toLowerCase();
-  const resumeText = resume.extractedText.toLowerCase();
+  const jobText = `${job.title || ''} ${job.description || ''}`.toLowerCase();
+  const resumeText = buildResumeText(resume).toLowerCase();
   
+  // Check if job mentions education requirements
+  const educationKeywords = ['bachelor', 'master', 'phd', 'ph.d', 'doctorate', 'degree', 'university', 'college', 'bsc', 'msc', 'mba'];
+  const jobHasEducationReq = educationKeywords.some(kw => jobText.includes(kw));
+  
+  if (!jobHasEducationReq) {
+    return 0; // Exact: 0 if job doesn't require specific education
+  }
+  
+  // Check structured education data first
+  if (resume.education && resume.education.length > 0) {
+    const eduText = resume.education.map(edu => {
+      if (typeof edu === 'string') return edu.toLowerCase();
+      return [edu.school, edu.degree, edu.field].filter(Boolean).join(' ').toLowerCase();
+    }).join(' ');
+    
+    let matches = 0;
+    educationKeywords.forEach(keyword => {
+      if (jobText.includes(keyword) && eduText.includes(keyword)) {
+        matches++;
+      }
+    });
+    
+    if (matches > 0) {
+      // Exact calculation: matches / total keywords
+      return Math.min(1.0, matches / educationKeywords.length);
+    }
+  }
+  
+  // Fallback to text matching
   let matches = 0;
   educationKeywords.forEach(keyword => {
     if (jobText.includes(keyword) && resumeText.includes(keyword)) {
@@ -237,7 +447,8 @@ function calculateEducationSimilarity(job, resume) {
     }
   });
   
-  return Math.min(1.0, matches / educationKeywords.length);
+  // Exact: return 0 if no matches, otherwise exact ratio
+  return matches > 0 ? Math.min(1.0, matches / educationKeywords.length) : 0;
 }
 
 // Calculate keyword similarity
@@ -277,5 +488,6 @@ module.exports = {
   calculateJaccardSimilarity,
   calculateWeightedSimilarity,
   calculateSemanticSimilarity,
-  getExperienceLevel
+  getExperienceLevel,
+  buildResumeText
 }; 

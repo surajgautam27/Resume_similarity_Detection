@@ -158,7 +158,7 @@ export default function Application() {
                     {sortedResumes[job._id].map(({ resume, score }, idx) => (
                       <li key={resume._id || idx} style={{ border: '1px solid #eee', borderRadius: 6, marginBottom: 16, padding: 16 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                          <div><b>Similarity Score:</b> {(score * 100).toFixed(2)}%</div>
+                          <div><b>Similarity Score:</b> {score}%</div>
                           <div style={{
                             padding: '2px 8px',
                             backgroundColor: '#e3f2fd',

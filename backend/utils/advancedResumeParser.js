@@ -364,22 +364,47 @@ function parseEnhancedSections(text) {
 }
 
 /**
- * Enhanced education extraction
+ * Enhanced education extraction (using advanced parser)
  */
 function extractEnhancedEducation(text) {
+  try {
+    const { parseEducationSection } = require('./educationParser');
+    const structuredEducation = parseEducationSection(text);
+    
+    if (structuredEducation.length > 0) {
+      // Convert structured entries to strings for compatibility
+      return structuredEducation.map(edu => {
+        const parts = [];
+        if (edu.degree) parts.push(edu.degree);
+        if (edu.field) parts.push(edu.field);
+        if (edu.school) parts.push(edu.school);
+        if (edu.startYear || edu.endYear) {
+          const years = [edu.startYear, edu.endYear].filter(Boolean).join(' - ');
+          if (years) parts.push(`(${years})`);
+        }
+        return parts.join(' ') || edu.school || '';
+      }).filter(Boolean);
+    }
+  } catch (error) {
+    console.error('Advanced education parser failed, using fallback:', error.message);
+  }
+  
+  // Fallback to simple extraction
   const sections = parseEnhancedSections(text);
   const educationLines = sections.education || [];
   const allLines = text.split('\n');
   
   const education = [];
+  const nonEducationKeywords = ['email', 'phone', 'github', 'linkedin', 'contact', 'address', '@'];
   
   // Look in education section first
   for (const line of educationLines) {
-    for (const keyword of EDUCATION_KEYWORDS) {
-      if (line.toLowerCase().includes(keyword)) {
-        education.push(line.trim());
-        break;
-      }
+    const lower = line.toLowerCase();
+    // Skip contact info
+    if (nonEducationKeywords.some(kw => lower.includes(kw))) continue;
+    
+    if (EDUCATION_KEYWORDS.some(keyword => lower.includes(keyword)) && line.length > 10) {
+      education.push(line.trim());
     }
   }
   
@@ -387,8 +412,11 @@ function extractEnhancedEducation(text) {
   if (education.length === 0) {
     for (const line of allLines) {
       const lowerLine = line.toLowerCase();
-      if (EDUCATION_KEYWORDS.some(keyword => lowerLine.includes(keyword))) {
+      if (nonEducationKeywords.some(kw => lowerLine.includes(kw))) continue;
+      
+      if (EDUCATION_KEYWORDS.some(keyword => lowerLine.includes(keyword)) && line.length > 10) {
         education.push(line.trim());
+        if (education.length >= 5) break;
       }
     }
   }
