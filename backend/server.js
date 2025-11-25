@@ -22,16 +22,19 @@ const resumeRoutes = require('./routes/resumes');
 const matchingRoutes = require('./routes/matching');
 const postRoutes = require('./routes/posts');
 
-// ✅ CORS FIRST (before helmet & limiter)
-app.use(cors({
+// ✅ CORS configuration
+const corsOptions = {
   origin: 'http://localhost:3000', // Frontend URL
-  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
-}));
+};
 
-// ✅ Explicitly handle preflight
-app.options('*', cors());
+// ✅ CORS FIRST (before helmet & limiter)
+app.use(cors(corsOptions));
+
+// ✅ Explicitly handle preflight requests
+app.options('*', cors(corsOptions));
 
 // Security middleware
 app.use(helmet());

@@ -8,11 +8,12 @@ const Resume = require('../models/Resume');
 const Job = require('../models/Job');
 const User = require('../models/User');
 const { extractSkills, extractCandidateInfo, extractResumeDetails } = require('../utils/resumeParser');
-const { parseResumeWithAI } = require('../utils/aiResumeParser');
+const { parseResumeWithAI, parseResumeWithAIAdvanced, isAIParserAvailable } = require('../utils/aiResumeParser');
 const { parseResumeEnhanced } = require('../utils/advancedResumeParser');
 const { parseResumeWithPyresparser, isPyresparserAvailable } = require('../utils/pyresParserWrapper');
 const { parseResumeStructured } = require('../utils/structuredResumeParser');
 const { parseEducationSection } = require('../utils/educationParser');
+const { parseWorkExperienceSection, extractWorkExperienceEntry } = require('../utils/workExperienceParser');
 
 const fsPromises = fs.promises;
 
@@ -331,34 +332,87 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
     const processingStartedAt = Date.now();
 
     // Read and parse PDF
-    const pdfBuffer = await fsPromises.readFile(req.file.path);
-    const pdfData = await pdfParse(pdfBuffer);
-    const extractedText = pdfData.text;
+    let pdfBuffer;
+    let pdfData;
+    let extractedText;
+    
+    try {
+      pdfBuffer = await fsPromises.readFile(req.file.path);
+      pdfData = await pdfParse(pdfBuffer);
+      extractedText = pdfData.text;
+    } catch (parseError) {
+      // Clean up uploaded file if parsing failed
+      try {
+        await fsPromises.unlink(req.file.path);
+      } catch (unlinkError) {
+        console.error('Error deleting file:', unlinkError);
+      }
+      
+      // Check for specific PDF parsing errors
+      if (parseError.message && parseError.message.includes('XRef')) {
+        return res.status(400).json({ 
+          error: 'Invalid or corrupted PDF file. The PDF appears to be damaged or has an invalid structure. Please try uploading a different PDF file.',
+          details: 'bad XRef entry - PDF cross-reference table is corrupted'
+        });
+      }
+      
+      if (parseError.message && parseError.message.includes('password')) {
+        return res.status(400).json({ 
+          error: 'PDF is password-protected. Please remove the password and try again.',
+          details: parseError.message
+        });
+      }
+      
+      return res.status(400).json({ 
+        error: 'Failed to parse PDF file. The file may be corrupted, password-protected, or in an unsupported format.',
+        details: parseError.message || 'Unknown PDF parsing error'
+      });
+    }
 
     console.log('PDF parsed:', {
       textLength: extractedText.length,
       pages: pdfData.numpages
     });
 
-    // Try parsers in order of accuracy: Structured -> Pyresparser -> AI -> Enhanced -> Basic
+    // Try parsers in order of accuracy
+    // Priority: AI (if available) -> Structured -> Pyresparser -> Enhanced -> Basic
+    // AI parser provides the most accurate extraction when OpenAI API key is configured
     let structuredParsedData = null;
     let pyresparserData = null;
     let aiParsedData = null;
     let enhancedParsedData = null;
     
-    // First try structured parser (best for display formatting)
-    try {
-      const structuredResult = parseResumeStructured(extractedText);
-      if (structuredResult.success) {
-        structuredParsedData = structuredResult.data;
-        console.log('Structured parsing successful');
+    // Try AI parsing first if available (most accurate with NLP/generative AI)
+    const aiAvailable = isAIParserAvailable();
+    if (aiAvailable) {
+      try {
+        aiParsedData = await parseResumeWithAI(extractedText);
+        if (aiParsedData && Object.keys(aiParsedData).length > 0) {
+          console.log('AI parsing successful (using generative AI/NLP)');
+        } else {
+          aiParsedData = null;
+        }
+      } catch (error) {
+        console.log('AI parsing failed, trying structured parser:', error.message);
+        aiParsedData = null;
       }
-    } catch (error) {
-      console.log('Structured parsing failed, trying pyresparser:', error.message);
+    }
+    
+    // If AI parsing not available or failed, try structured parser (best for display formatting)
+    if (!aiParsedData) {
+      try {
+        const structuredResult = parseResumeStructured(extractedText);
+        if (structuredResult.success) {
+          structuredParsedData = structuredResult.data;
+          console.log('Structured parsing successful');
+        }
+      } catch (error) {
+        console.log('Structured parsing failed, trying pyresparser:', error.message);
+      }
     }
 
-    // If structured parsing failed, try pyresparser
-    if (!structuredParsedData) {
+    // If both failed, try pyresparser
+    if (!aiParsedData && !structuredParsedData) {
       try {
         const isPyresAvailable = await isPyresparserAvailable();
         if (isPyresAvailable) {
@@ -367,27 +421,15 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
             console.log('Pyresparser parsing successful');
           }
         } else {
-          console.log('Pyresparser not available, trying AI parser');
+          console.log('Pyresparser not available, trying enhanced parser');
         }
       } catch (error) {
-        console.log('Pyresparser parsing failed, trying AI parser:', error.message);
-      }
-    }
-
-    // If both failed, try AI parsing
-    if (!structuredParsedData && !pyresparserData) {
-      try {
-        aiParsedData = await parseResumeWithAI(extractedText);
-        if (aiParsedData) {
-          console.log('AI parsing successful');
-        }
-      } catch (error) {
-        console.log('AI parsing failed, trying enhanced parser:', error.message);
+        console.log('Pyresparser parsing failed, trying enhanced parser:', error.message);
       }
     }
 
     // If all failed, try enhanced parser
-    if (!structuredParsedData && !pyresparserData && !aiParsedData) {
+    if (!aiParsedData && !structuredParsedData && !pyresparserData) {
       try {
         enhancedParsedData = parseResumeEnhanced(extractedText);
         console.log('Enhanced parsing successful');
@@ -399,10 +441,13 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
     let candidateInfo, structuredDetails, skills, languages, educationEntries, 
         certificationEntries, projects, highlights, summaryText, experienceYears, candidateBasics, workExperience, achievements;
 
+    // Collect skills from all parsers to merge them
+    const allSkills = new Set();
+
     if (structuredParsedData) {
       // Use structured parsed data (best for display)
       candidateBasics = structuredParsedData.candidate;
-      skills = structuredParsedData.skills || [];
+      (structuredParsedData.skills || []).forEach(s => allSkills.add(s));
       languages = structuredParsedData.languages || [];
       summaryText = structuredParsedData.summary || '';
       experienceYears = structuredParsedData.experience || 0;
@@ -411,12 +456,12 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
       projects = structuredParsedData.projects || [];
       workExperience = structuredParsedData.workExperience || [];
       achievements = structuredParsedData.achievements || [];
-      highlights = skills.slice(0, 10); // Use top skills as highlights
+      highlights = Array.from(allSkills).slice(0, 10); // Use top skills as highlights
       
       console.log('Extracted via Structured Parser:', {
         name: candidateBasics.name,
         email: candidateBasics.email,
-        skillsCount: skills.length,
+        skillsCount: allSkills.size,
         experienceYears,
         educationCount: educationEntries.length,
         workExperienceCount: workExperience.length,
@@ -425,7 +470,7 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
     } else if (pyresparserData) {
       // Use pyresparser data (most accurate)
       candidateBasics = pyresparserData.candidate;
-      skills = pyresparserData.skills || [];
+      (pyresparserData.skills || []).forEach(s => allSkills.add(s));
       languages = pyresparserData.languages || [];
       summaryText = pyresparserData.summary || '';
       experienceYears = pyresparserData.experience || 0;
@@ -448,12 +493,12 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
       
       certificationEntries = pyresparserData.certifications || [];
       projects = pyresparserData.projects || [];
-      highlights = skills.slice(0, 20); // Use top skills as highlights
+      highlights = Array.from(allSkills).slice(0, 20); // Use top skills as highlights
       
       console.log('Extracted via Pyresparser:', {
         name: candidateBasics.name,
         email: candidateBasics.email,
-        skillsCount: skills.length,
+        skillsCount: allSkills.size,
         experienceYears,
         educationCount: educationEntries.length,
         designations: pyresparserData.designations?.length || 0,
@@ -468,7 +513,8 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
         location: aiParsedData.location || ''
       };
       
-      skills = aiParsedData.skills || [];
+      // Add AI skills to allSkills Set
+      (aiParsedData.skills || []).forEach(s => allSkills.add(s));
       languages = aiParsedData.languages || [];
       summaryText = aiParsedData.summary || '';
       experienceYears = aiParsedData.experienceYears || 0;
@@ -496,14 +542,16 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
       console.log('Extracted via AI:', {
         name: candidateBasics.name,
         email: candidateBasics.email,
-        skillsCount: skills.length,
+        skillsCount: allSkills.size,
         experienceYears,
         educationCount: educationEntries.length
       });
     } else if (enhancedParsedData) {
       // Use enhanced parsed data
       candidateBasics = enhancedParsedData.candidate;
-      skills = enhancedParsedData.skills;
+      if (enhancedParsedData.skills && Array.isArray(enhancedParsedData.skills)) {
+        enhancedParsedData.skills.forEach(s => allSkills.add(s));
+      }
       languages = enhancedParsedData.languages;
       summaryText = enhancedParsedData.summary;
       experienceYears = enhancedParsedData.experience;
@@ -536,7 +584,10 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
         candidateBasics = candidateBasicsTemp;
       
         // Extract skills
-        skills = extractSkills(extractedText);
+        const basicSkills = extractSkills(extractedText);
+        if (basicSkills && Array.isArray(basicSkills)) {
+          basicSkills.forEach(s => allSkills.add(s));
+        }
 
         languages = Array.from(
           new Set([...(candidateLanguages || []), ...(structuredDetails.languages || [])])
@@ -587,6 +638,153 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
       candidateBasics = candidateBasics || {};
       candidateBasics.name = candidateBasics.name || req.file.originalname.replace(/\.pdf$/i, '').replace(/[-_]/g, ' ').trim() || 'Unknown';
     }
+    
+    // Merge skills from all successful parsers
+    let allSkillsArray = Array.from(allSkills);
+    
+    // Also extract skills from the entire text as a final pass using improved extractSkills
+    const { extractSkills: extractSkillsFromText } = require('../utils/structuredResumeParser');
+    try {
+      const additionalSkills = extractSkillsFromText(extractedText);
+      if (additionalSkills && Array.isArray(additionalSkills)) {
+        additionalSkills.forEach(s => {
+          if (s && typeof s === 'string' && s.trim().length > 0) {
+            allSkillsArray.push(s.trim());
+          }
+        });
+      }
+    } catch (skillExtractError) {
+      console.error('Error extracting additional skills from text:', skillExtractError.message);
+    }
+    
+    // Normalize and deduplicate skills
+    const normalizeSkillName = (skill) => {
+      if (!skill || typeof skill !== 'string') return null;
+      let cleaned = skill.trim()
+        .replace(/\s+/g, ' ')
+        .replace(/\.js$/i, '.js')
+        .replace(/\.net$/i, '.NET')
+        .replace(/c\+\+/gi, 'C++')
+        .replace(/c#/gi, 'C#')
+        .replace(/javascript/gi, 'JavaScript')
+        .replace(/python/gi, 'Python')
+        .replace(/java\b/gi, 'Java')
+        .replace(/react/gi, 'React')
+        .replace(/angular/gi, 'Angular')
+        .replace(/vue/gi, 'Vue')
+        .replace(/node\.?js/gi, 'Node.js')
+        .replace(/typescript/gi, 'TypeScript')
+        .replace(/html/gi, 'HTML')
+        .replace(/css/gi, 'CSS')
+        .replace(/sql/gi, 'SQL')
+        .replace(/aws/gi, 'AWS')
+        .replace(/azure/gi, 'Azure')
+        .replace(/docker/gi, 'Docker')
+        .replace(/kubernetes/gi, 'Kubernetes')
+        .replace(/helm/gi, 'Helm')
+        .replace(/eks/gi, 'EKS')
+        .replace(/git/gi, 'Git')
+        .replace(/github\s+actions/gi, 'GitHub Actions')
+        .replace(/gitlab\s+ci/gi, 'GitLab CI')
+        .replace(/circleci/gi, 'CircleCI')
+        .replace(/terraform/gi, 'Terraform')
+        .replace(/ansible/gi, 'Ansible')
+        .replace(/cloudformation/gi, 'CloudFormation')
+        .replace(/prometheus/gi, 'Prometheus')
+        .replace(/grafana/gi, 'Grafana')
+        .replace(/elk\s+stack/gi, 'ELK Stack')
+        .replace(/mongodb/gi, 'MongoDB')
+        .replace(/mysql/gi, 'MySQL')
+        .replace(/postgresql/gi, 'PostgreSQL')
+        .replace(/redis/gi, 'Redis')
+        .replace(/express/gi, 'Express')
+        .replace(/django/gi, 'Django')
+        .replace(/flask/gi, 'Flask')
+        .replace(/spring/gi, 'Spring')
+        .replace(/laravel/gi, 'Laravel')
+        .replace(/php/gi, 'PHP')
+        .replace(/ruby/gi, 'Ruby')
+        .replace(/rails/gi, 'Rails')
+        .replace(/go\b/gi, 'Go')
+        .replace(/swift/gi, 'Swift')
+        .replace(/kotlin/gi, 'Kotlin')
+        .replace(/bash/gi, 'Bash')
+        .replace(/yaml/gi, 'YAML')
+        .replace(/nginx/gi, 'Nginx')
+        .replace(/ssl/gi, 'SSL')
+        .replace(/tls/gi, 'TLS')
+        .replace(/firewall/gi, 'Firewall')
+        .replace(/load\s+balancer/gi, 'Load Balancer')
+        .replace(/bitbucket/gi, 'Bitbucket')
+        .replace(/digitalocean/gi, 'DigitalOcean')
+        .replace(/vs\s+code/gi, 'VS Code')
+        .replace(/visual\s+studio\s+code/gi, 'VS Code')
+        .replace(/vscode/gi, 'VS Code')
+        .replace(/ubuntu/gi, 'Ubuntu')
+        .replace(/centos/gi, 'CentOS')
+        .replace(/linux/gi, 'Linux')
+        .replace(/tensorflow/gi, 'TensorFlow')
+        .replace(/pytorch/gi, 'PyTorch')
+        .replace(/pandas/gi, 'Pandas')
+        .replace(/numpy/gi, 'NumPy')
+        .replace(/jira/gi, 'Jira')
+        .replace(/jenkins/gi, 'Jenkins')
+        .replace(/selenium/gi, 'Selenium')
+        .replace(/cypress/gi, 'Cypress')
+        .replace(/jest/gi, 'Jest')
+        .replace(/react\s+native/gi, 'React Native')
+        .replace(/flutter/gi, 'Flutter')
+        .replace(/machine\s+learning/gi, 'Machine Learning')
+        .replace(/deep\s+learning/gi, 'Deep Learning')
+        .replace(/data\s+science/gi, 'Data Science')
+        .replace(/artificial\s+intelligence/gi, 'Artificial Intelligence')
+        .replace(/natural\s+language\s+processing/gi, 'NLP')
+        .replace(/computer\s+vision/gi, 'Computer Vision')
+        .replace(/big\s+data/gi, 'Big Data')
+        .replace(/agile/gi, 'Agile')
+        .replace(/scrum/gi, 'Scrum')
+        .replace(/kanban/gi, 'Kanban')
+        .replace(/rest\s+api/gi, 'REST API')
+        .replace(/graphql/gi, 'GraphQL')
+        .replace(/webpack/gi, 'Webpack')
+        .replace(/bootstrap/gi, 'Bootstrap')
+        .replace(/tailwind/gi, 'Tailwind')
+        .replace(/material\s+ui/gi, 'Material-UI')
+        .replace(/redux/gi, 'Redux')
+        .replace(/vuex/gi, 'Vuex')
+        .replace(/next\.?js/gi, 'Next.js')
+        .replace(/nuxt\.?js/gi, 'Nuxt.js')
+        .replace(/express\.?js/gi, 'Express.js')
+        .replace(/angular\.?js/gi, 'AngularJS')
+        .replace(/vue\.?js/gi, 'Vue.js')
+        .replace(/react\.?js/gi, 'React.js');
+      
+      return cleaned && cleaned.length >= 2 && cleaned.length <= 50 ? cleaned : null;
+    };
+    
+    // Normalize and deduplicate
+    const normalizedSkills = new Set();
+    allSkillsArray.forEach(skill => {
+      if (!skill) return;
+      const normalized = normalizeSkillName(String(skill));
+      if (normalized) {
+        normalizedSkills.add(normalized);
+      }
+    });
+    
+    skills = Array.from(normalizedSkills).filter(Boolean);
+    
+    // Ensure skills is always an array
+    if (!skills || !Array.isArray(skills)) {
+      skills = [];
+    }
+    
+    highlights = skills.slice(0, 20); // Use top skills as highlights
+    
+    console.log('Final merged skills:', {
+      totalSkills: skills.length,
+      sampleSkills: skills.slice(0, 10)
+    });
     
     // Always use advanced education parser to ensure best results
     // It handles multi-line entries, structured data, and filters contact info
@@ -648,6 +846,83 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
 
     educationEntries = normalizeEducationEntries(educationEntries || []);
 
+    // Parse work experience with dates using advanced parser
+    let structuredWorkExperience = [];
+    try {
+      console.log('Parsing work experience from extracted text...');
+      structuredWorkExperience = parseWorkExperienceSection(extractedText);
+      
+      // If we got structured work experience, use it; otherwise keep existing
+      if (structuredWorkExperience.length > 0) {
+        // Store structured format with dates for accurate period calculation
+        console.log('Parsed work experience:', structuredWorkExperience.length, 'entries with dates');
+      } else if (!workExperience || workExperience.length === 0) {
+        // If no structured work experience found, try to extract from existing workExperience array
+        if (workExperience && workExperience.length > 0) {
+          // Try to parse dates from existing work experience strings
+          structuredWorkExperience = workExperience
+            .map(exp => {
+              if (typeof exp === 'string') {
+                return extractWorkExperienceEntry(exp);
+              }
+              return exp;
+            })
+            .filter(Boolean);
+        }
+      }
+      
+      // Calculate experience years from structured work experience dates
+      if (structuredWorkExperience.length > 0) {
+        const now = new Date();
+        let totalMonths = 0;
+        const dateRanges = [];
+        
+        structuredWorkExperience.forEach(exp => {
+          // Convert ISO strings back to Date objects for calculation
+          const startDate = exp.startDate ? (exp.startDate instanceof Date ? exp.startDate : new Date(exp.startDate)) : null;
+          const endDate = exp.endDate ? (exp.endDate instanceof Date ? exp.endDate : new Date(exp.endDate)) : null;
+          
+          if (startDate && endDate && !isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+            dateRanges.push({ start: startDate, end: endDate });
+          }
+        });
+        
+        if (dateRanges.length > 0) {
+          // Merge overlapping ranges
+          dateRanges.sort((a, b) => a.start - b.start);
+          const merged = [];
+          let current = dateRanges[0];
+          
+          for (let i = 1; i < dateRanges.length; i++) {
+            if (dateRanges[i].start <= current.end) {
+              current.end = dateRanges[i].end > current.end ? dateRanges[i].end : current.end;
+            } else {
+              merged.push(current);
+              current = dateRanges[i];
+            }
+          }
+          merged.push(current);
+          
+          // Calculate total months
+          for (const range of merged) {
+            const months = (range.end.getFullYear() - range.start.getFullYear()) * 12 +
+                           (range.end.getMonth() - range.start.getMonth());
+            totalMonths += Math.max(1, months);
+          }
+          
+          const calculatedYears = Math.round((totalMonths / 12) * 10) / 10;
+          
+          // Use calculated experience if it's more accurate than text-based
+          if (calculatedYears > 0 && (experienceYears === 0 || calculatedYears > experienceYears)) {
+            experienceYears = calculatedYears;
+            console.log('Updated experience years from work experience dates:', calculatedYears);
+          }
+        }
+      }
+    } catch (workExpError) {
+      console.error('Work experience parsing failed, using original results:', workExpError.message);
+    }
+
     // Store the raw parsed data from whichever parser succeeded
     let parsedDataToStore = null;
     if (structuredParsedData) {
@@ -706,7 +981,7 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
       projects,
       summary: summaryText ? summaryText.substring(0, 2000) : '',
       highlights,
-      workExperience: workExperience || [],
+      workExperience: structuredWorkExperience.length > 0 ? structuredWorkExperience : (workExperience || []),
       achievements: achievements || [],
       parsedData: parsedDataToStore,
       uploadedBy: req.user.userId,
@@ -782,49 +1057,83 @@ router.post('/upload-multiple', auth, upload.array('resumes', 10), async (req, r
         const processingStartedAt = Date.now();
 
         // Read and parse PDF
-        const pdfBuffer = await fsPromises.readFile(file.path);
-        const pdfData = await pdfParse(pdfBuffer);
-        const extractedText = pdfData.text;
+        let pdfBuffer;
+        let pdfData;
+        let extractedText;
+        
+        try {
+          pdfBuffer = await fsPromises.readFile(file.path);
+          pdfData = await pdfParse(pdfBuffer);
+          extractedText = pdfData.text;
+        } catch (parseError) {
+          // Clean up uploaded file if parsing failed
+          try {
+            await fsPromises.unlink(file.path);
+          } catch (unlinkError) {
+            console.error('Error deleting file:', unlinkError);
+          }
+          
+          // Add error to errors array and continue with next file
+          const errorMessage = parseError.message && parseError.message.includes('XRef')
+            ? 'Invalid or corrupted PDF file'
+            : parseError.message && parseError.message.includes('password')
+            ? 'PDF is password-protected'
+            : 'Failed to parse PDF file';
+          
+          errors.push({
+            filename: file.originalname,
+            error: errorMessage,
+            details: parseError.message || 'Unknown PDF parsing error'
+          });
+          continue; // Skip to next file
+        }
 
-        // Try parsers in order: Structured -> Pyresparser -> AI -> Enhanced -> Basic
+        // Try parsers in order: AI (if available) -> Structured -> Pyresparser -> Enhanced -> Basic
         let structuredParsedData = null;
         let pyresparserData = null;
         let aiParsedData = null;
         let enhancedParsedData = null;
         
-        // First try structured parser
-        try {
-          const structuredResult = parseResumeStructured(extractedText);
-          if (structuredResult.success) {
-            structuredParsedData = structuredResult.data;
+        // Try AI parsing first if available (most accurate with NLP/generative AI)
+        const aiAvailable = isAIParserAvailable();
+        if (aiAvailable) {
+          try {
+            aiParsedData = await parseResumeWithAI(extractedText);
+            if (!aiParsedData || Object.keys(aiParsedData).length === 0) {
+              aiParsedData = null;
+            }
+          } catch (error) {
+            console.log(`AI parsing failed for ${file.originalname}, trying structured parser:`, error.message);
+            aiParsedData = null;
           }
-        } catch (error) {
-          console.log(`Structured parsing failed for ${file.originalname}, trying pyresparser`);
+        }
+        
+        // If AI parsing not available or failed, try structured parser
+        if (!aiParsedData) {
+          try {
+            const structuredResult = parseResumeStructured(extractedText);
+            if (structuredResult.success) {
+              structuredParsedData = structuredResult.data;
+            }
+          } catch (error) {
+            console.log(`Structured parsing failed for ${file.originalname}, trying pyresparser`);
+          }
         }
 
-        // If structured parsing failed, try pyresparser
-        if (!structuredParsedData) {
+        // If both failed, try pyresparser
+        if (!aiParsedData && !structuredParsedData) {
           try {
             const isPyresAvailable = await isPyresparserAvailable();
             if (isPyresAvailable) {
               pyresparserData = await parseResumeWithPyresparser(file.path);
             }
           } catch (error) {
-            console.log(`Pyresparser parsing failed for ${file.originalname}, trying AI parser`);
-          }
-        }
-
-        // If both failed, try AI parsing
-        if (!structuredParsedData && !pyresparserData) {
-          try {
-            aiParsedData = await parseResumeWithAI(extractedText);
-          } catch (error) {
-            console.log(`AI parsing failed for ${file.originalname}, trying enhanced parser`);
+            console.log(`Pyresparser parsing failed for ${file.originalname}, trying enhanced parser`);
           }
         }
 
         // If all failed, try enhanced parser
-        if (!structuredParsedData && !pyresparserData && !aiParsedData) {
+        if (!aiParsedData && !structuredParsedData && !pyresparserData) {
           try {
             enhancedParsedData = parseResumeEnhanced(extractedText);
           } catch (error) {
@@ -998,6 +1307,76 @@ router.post('/upload-multiple', auth, upload.array('resumes', 10), async (req, r
         
         educationEntries = normalizeEducationEntries(educationEntries || []);
 
+        // Parse work experience with dates using advanced parser
+        let structuredWorkExperience = [];
+        try {
+          structuredWorkExperience = parseWorkExperienceSection(extractedText);
+          
+          if (structuredWorkExperience.length > 0) {
+            console.log(`Parsed work experience for ${file.originalname}:`, structuredWorkExperience.length, 'entries');
+            
+            // Calculate experience years from structured work experience dates
+            const now = new Date();
+            let totalMonths = 0;
+            const dateRanges = [];
+            
+            structuredWorkExperience.forEach(exp => {
+              // Convert ISO strings back to Date objects for calculation
+              const startDate = exp.startDate ? (exp.startDate instanceof Date ? exp.startDate : new Date(exp.startDate)) : null;
+              const endDate = exp.endDate ? (exp.endDate instanceof Date ? exp.endDate : new Date(exp.endDate)) : null;
+              
+              if (startDate && endDate && !isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+                dateRanges.push({ start: startDate, end: endDate });
+              }
+            });
+            
+            if (dateRanges.length > 0) {
+              // Merge overlapping ranges
+              dateRanges.sort((a, b) => a.start - b.start);
+              const merged = [];
+              let current = dateRanges[0];
+              
+              for (let i = 1; i < dateRanges.length; i++) {
+                if (dateRanges[i].start <= current.end) {
+                  current.end = dateRanges[i].end > current.end ? dateRanges[i].end : current.end;
+                } else {
+                  merged.push(current);
+                  current = dateRanges[i];
+                }
+              }
+              merged.push(current);
+              
+              // Calculate total months
+              for (const range of merged) {
+                const months = (range.end.getFullYear() - range.start.getFullYear()) * 12 +
+                               (range.end.getMonth() - range.start.getMonth());
+                totalMonths += Math.max(1, months);
+              }
+              
+              const calculatedYears = Math.round((totalMonths / 12) * 10) / 10;
+              
+              // Use calculated experience if it's more accurate
+              if (calculatedYears > 0 && (experienceYears === 0 || calculatedYears > experienceYears)) {
+                experienceYears = calculatedYears;
+              }
+            }
+          } else if (!workExperience || workExperience.length === 0) {
+            // Try to parse from existing workExperience strings
+            if (workExperience && workExperience.length > 0) {
+              structuredWorkExperience = workExperience
+                .map(exp => {
+                  if (typeof exp === 'string') {
+                    return extractWorkExperienceEntry(exp);
+                  }
+                  return exp;
+                })
+                .filter(Boolean);
+            }
+          }
+        } catch (workExpError) {
+          console.error(`Work experience parsing failed for ${file.originalname}:`, workExpError.message);
+        }
+
         // Store the raw parsed data from whichever parser succeeded
         let parsedDataToStore = null;
         if (structuredParsedData) {
@@ -1043,7 +1422,7 @@ router.post('/upload-multiple', auth, upload.array('resumes', 10), async (req, r
           projects,
           summary: summaryText ? summaryText.substring(0, 2000) : '',
           highlights,
-          workExperience: workExperience || [],
+          workExperience: structuredWorkExperience.length > 0 ? structuredWorkExperience : (workExperience || []),
           achievements: achievements || [],
           parsedData: parsedDataToStore,
           uploadedBy: req.user.userId,
@@ -1258,49 +1637,84 @@ router.put('/:id/reparse', auth, async (req, res) => {
     const processingStartedAt = Date.now();
 
     // Read and parse PDF
-    const pdfBuffer = await fsPromises.readFile(resolvedPath);
-    const pdfData = await pdfParse(pdfBuffer);
-    const extractedText = pdfData.text;
+    let pdfBuffer;
+    let pdfData;
+    let extractedText;
+    
+    try {
+      pdfBuffer = await fsPromises.readFile(resolvedPath);
+      pdfData = await pdfParse(pdfBuffer);
+      extractedText = pdfData.text;
+    } catch (parseError) {
+      // Check for specific PDF parsing errors
+      if (parseError.message && parseError.message.includes('XRef')) {
+        return res.status(400).json({ 
+          error: 'Invalid or corrupted PDF file. The PDF appears to be damaged or has an invalid structure.',
+          details: 'bad XRef entry - PDF cross-reference table is corrupted'
+        });
+      }
+      
+      if (parseError.message && parseError.message.includes('password')) {
+        return res.status(400).json({ 
+          error: 'PDF is password-protected. Please remove the password and try again.',
+          details: parseError.message
+        });
+      }
+      
+      return res.status(400).json({ 
+        error: 'Failed to parse PDF file. The file may be corrupted, password-protected, or in an unsupported format.',
+        details: parseError.message || 'Unknown PDF parsing error'
+      });
+    }
 
-    // Try parsers in order of accuracy: Structured -> Pyresparser -> AI -> Enhanced -> Basic
+    // Try parsers in order of accuracy: AI (if available) -> Structured -> Pyresparser -> Enhanced -> Basic
     let structuredParsedData = null;
     let pyresparserData = null;
     let aiParsedData = null;
     let enhancedParsedData = null;
     
-    // First try structured parser
-    try {
-      const structuredResult = parseResumeStructured(extractedText);
-      if (structuredResult.success) {
-        structuredParsedData = structuredResult.data;
+    // Try AI parsing first if available (most accurate with NLP/generative AI)
+    const aiAvailable = isAIParserAvailable();
+    if (aiAvailable) {
+      try {
+        aiParsedData = await parseResumeWithAI(extractedText);
+        if (aiParsedData && Object.keys(aiParsedData).length > 0) {
+          console.log('AI parsing successful (using generative AI/NLP)');
+        } else {
+          aiParsedData = null;
+        }
+      } catch (error) {
+        console.log('AI parsing failed, trying structured parser:', error.message);
+        aiParsedData = null;
       }
-    } catch (error) {
-      console.log('Structured parsing failed, trying pyresparser:', error.message);
+    }
+    
+    // If AI parsing not available or failed, try structured parser
+    if (!aiParsedData) {
+      try {
+        const structuredResult = parseResumeStructured(extractedText);
+        if (structuredResult.success) {
+          structuredParsedData = structuredResult.data;
+        }
+      } catch (error) {
+        console.log('Structured parsing failed, trying pyresparser:', error.message);
+      }
     }
 
-    // If structured parsing failed, try pyresparser
-    if (!structuredParsedData) {
+    // If both failed, try pyresparser
+    if (!aiParsedData && !structuredParsedData) {
       try {
         const isPyresAvailable = await isPyresparserAvailable();
         if (isPyresAvailable) {
           pyresparserData = await parseResumeWithPyresparser(resolvedPath);
         }
       } catch (error) {
-        console.log('Pyresparser parsing failed, trying AI parser:', error.message);
-      }
-    }
-
-    // If both failed, try AI parsing
-    if (!structuredParsedData && !pyresparserData) {
-      try {
-        aiParsedData = await parseResumeWithAI(extractedText);
-      } catch (error) {
-        console.log('AI parsing failed, trying enhanced parser:', error.message);
+        console.log('Pyresparser parsing failed, trying enhanced parser:', error.message);
       }
     }
 
     // If all failed, try enhanced parser
-    if (!structuredParsedData && !pyresparserData && !aiParsedData) {
+    if (!aiParsedData && !structuredParsedData && !pyresparserData) {
       try {
         enhancedParsedData = parseResumeEnhanced(extractedText);
       } catch (error) {
@@ -1470,6 +1884,78 @@ router.put('/:id/reparse', auth, async (req, res) => {
     
     educationEntries = normalizeEducationEntries(educationEntries || []);
 
+    // Parse work experience with dates using advanced parser
+    let structuredWorkExperience = [];
+    try {
+      console.log('Parsing work experience from extracted text...');
+      structuredWorkExperience = parseWorkExperienceSection(extractedText);
+      
+      if (structuredWorkExperience.length > 0) {
+        console.log('Parsed work experience:', structuredWorkExperience.length, 'entries with dates');
+        
+        // Calculate experience years from structured work experience dates
+        const now = new Date();
+        let totalMonths = 0;
+        const dateRanges = [];
+        
+        structuredWorkExperience.forEach(exp => {
+          // Convert ISO strings back to Date objects for calculation
+          const startDate = exp.startDate ? (exp.startDate instanceof Date ? exp.startDate : new Date(exp.startDate)) : null;
+          const endDate = exp.endDate ? (exp.endDate instanceof Date ? exp.endDate : new Date(exp.endDate)) : null;
+          
+          if (startDate && endDate && !isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+            dateRanges.push({ start: startDate, end: endDate });
+          }
+        });
+        
+        if (dateRanges.length > 0) {
+          // Merge overlapping ranges
+          dateRanges.sort((a, b) => a.start - b.start);
+          const merged = [];
+          let current = dateRanges[0];
+          
+          for (let i = 1; i < dateRanges.length; i++) {
+            if (dateRanges[i].start <= current.end) {
+              current.end = dateRanges[i].end > current.end ? dateRanges[i].end : current.end;
+            } else {
+              merged.push(current);
+              current = dateRanges[i];
+            }
+          }
+          merged.push(current);
+          
+          // Calculate total months
+          for (const range of merged) {
+            const months = (range.end.getFullYear() - range.start.getFullYear()) * 12 +
+                           (range.end.getMonth() - range.start.getMonth());
+            totalMonths += Math.max(1, months);
+          }
+          
+          const calculatedYears = Math.round((totalMonths / 12) * 10) / 10;
+          
+          // Use calculated experience if it's more accurate
+          if (calculatedYears > 0 && (experienceYears === 0 || calculatedYears > experienceYears)) {
+            experienceYears = calculatedYears;
+            console.log('Updated experience years from work experience dates:', calculatedYears);
+          }
+        }
+      } else if (!workExperience || workExperience.length === 0) {
+        // Try to parse from existing workExperience strings
+        if (workExperience && workExperience.length > 0) {
+          structuredWorkExperience = workExperience
+            .map(exp => {
+              if (typeof exp === 'string') {
+                return extractWorkExperienceEntry(exp);
+              }
+              return exp;
+            })
+            .filter(Boolean);
+        }
+      }
+    } catch (workExpError) {
+      console.error('Work experience parsing failed:', workExpError.message);
+    }
+
     // Store the raw parsed data
     let parsedDataToStore = null;
     if (structuredParsedData) {
@@ -1509,7 +1995,7 @@ router.put('/:id/reparse', auth, async (req, res) => {
     resume.projects = projects;
     resume.summary = summaryText ? summaryText.substring(0, 2000) : '';
     resume.highlights = highlights;
-    resume.workExperience = workExperience || [];
+    resume.workExperience = structuredWorkExperience.length > 0 ? structuredWorkExperience : (workExperience || []);
     resume.achievements = achievements || [];
     resume.parsedData = parsedDataToStore;
     resume.status = 'processed';

@@ -246,9 +246,31 @@ export default function Resumes() {
                       <div style={{ marginTop: 8 }}>
                         <strong style={{ color: '#495057' }}>Education:</strong>
                         <ul style={{ margin: '6px 0', paddingLeft: 18, color: '#6c757d', fontSize: '13px' }}>
-                          {resume.education.slice(0, 4).map((edu, idx) => (
-                            <li key={`edu-${resume._id}-${idx}`}>{edu}</li>
-                          ))}
+                          {resume.education.slice(0, 4).map((edu, idx) => {
+                            // Handle both string and object formats
+                            let eduText = '';
+                            if (typeof edu === 'string') {
+                              eduText = edu;
+                            } else if (typeof edu === 'object' && edu !== null) {
+                              const parts = [];
+                              if (edu.degree && edu.field) {
+                                parts.push(`${edu.degree} in ${edu.field}`);
+                              } else if (edu.degree || edu.field) {
+                                parts.push(edu.degree || edu.field);
+                              }
+                              if (edu.school) {
+                                parts.push(edu.school);
+                              }
+                              if (edu.startYear || edu.endYear) {
+                                const years = [edu.startYear, edu.endYear].filter(Boolean).join(' - ');
+                                if (years) parts.push(`(${years})`);
+                              }
+                              eduText = parts.filter(Boolean).join(' • ') || edu.school || JSON.stringify(edu);
+                            } else {
+                              eduText = String(edu);
+                            }
+                            return <li key={`edu-${resume._id}-${idx}`}>{eduText}</li>;
+                          })}
                         </ul>
                       </div>
                     )}

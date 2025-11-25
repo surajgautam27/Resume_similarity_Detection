@@ -155,24 +155,53 @@ export default function PublicProfile() {
         <div style={{ marginBottom: '32px' }}>
           <h3 style={{ margin: '0 0 16px 0', color: '#2c3e50', fontSize: '20px' }}>Education</h3>
           <div style={{ display: 'grid', gap: '16px' }}>
-            {profile.profile.education.map((ed, idx) => (
-              <div key={idx} style={{
-                padding: '16px',
-                background: '#f8f9fa',
-                borderRadius: '8px',
-                border: '1px solid #e9ecef'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                  <h4 style={{ margin: '0', color: '#2c3e50', fontSize: '16px' }}>{ed.school}</h4>
-                  <span style={{ fontSize: '14px', color: '#7f8c8d' }}>
-                    {ed.startYear} - {ed.endYear || 'Present'}
-                  </span>
+            {profile.profile.education.map((ed, idx) => {
+              // Handle both string and object formats
+              if (typeof ed === 'string') {
+                return (
+                  <div key={idx} style={{
+                    padding: '16px',
+                    background: '#f8f9fa',
+                    borderRadius: '8px',
+                    border: '1px solid #e9ecef'
+                  }}>
+                    <p style={{ margin: '0', color: '#34495e', fontWeight: '500' }}>{ed}</p>
+                  </div>
+                );
+              }
+              
+              // Handle object format
+              const school = ed.school || ed.name || ed.institution || ed.college || ed.university || '';
+              const degree = ed.degree || ed.title || '';
+              const field = ed.field || ed.major || ed.specialization || '';
+              const startYear = ed.startYear || ed.start_date || ed.startDate;
+              const endYear = ed.endYear || ed.end_date || ed.endDate || ed.year;
+              
+              return (
+                <div key={idx} style={{
+                  padding: '16px',
+                  background: '#f8f9fa',
+                  borderRadius: '8px',
+                  border: '1px solid #e9ecef'
+                }}>
+                  {school && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                      <h4 style={{ margin: '0', color: '#2c3e50', fontSize: '16px' }}>{school}</h4>
+                      {(startYear || endYear) && (
+                        <span style={{ fontSize: '14px', color: '#7f8c8d' }}>
+                          {startYear ? startYear : ''} {startYear && endYear ? ' - ' : ''} {endYear ? endYear : (startYear ? 'Present' : '')}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {(degree || field) && (
+                    <p style={{ margin: '4px 0', color: '#34495e', fontWeight: '500' }}>
+                      {degree && field ? `${degree} in ${field}` : (degree || field)}
+                    </p>
+                  )}
                 </div>
-                <p style={{ margin: '4px 0', color: '#34495e', fontWeight: '500' }}>
-                  {ed.degree} in {ed.field}
-                </p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

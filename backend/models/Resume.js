@@ -65,7 +65,7 @@ const resumeSchema = new mongoose.Schema({
     default: []
   },
   workExperience: {
-    type: [String],
+    type: [mongoose.Schema.Types.Mixed],
     default: []
   },
   achievements: {

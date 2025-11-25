@@ -476,11 +476,24 @@ router.patch('/:jobId/applications/:applicationId/status', auth, [
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      return res.status(400).json({ 
+        error: errors.array().map(e => e.msg).join(', '),
+        errors: errors.array() 
+      });
     }
 
     const { jobId, applicationId } = req.params;
     const { status, notes } = req.body;
+
+    console.log('Update application status request:', {
+      jobId,
+      applicationId,
+      status,
+      hasNotes: notes !== undefined,
+      notesLength: notes?.length || 0,
+      userId: req.user.userId,
+      userRole: req.user.role
+    });
 
     // Only companies can update application status
     if (req.user.role !== 'company') {
@@ -497,15 +510,31 @@ router.patch('/:jobId/applications/:applicationId/status', auth, [
       return res.status(403).json({ error: 'You can only update applications for your own jobs' });
     }
 
-    const application = job.applications.id(applicationId);
+    // Try to find the application by ID
+    let application = job.applications.id(applicationId);
+    
+    // If not found by id(), try finding by _id string match
     if (!application) {
+      application = job.applications.find(app => 
+        app._id && (app._id.toString() === applicationId || app._id.toString() === String(applicationId))
+      );
+    }
+    
+    if (!application) {
+      console.error('Application not found:', {
+        applicationId,
+        availableApplicationIds: job.applications.map(app => app._id?.toString())
+      });
       return res.status(404).json({ error: 'Application not found' });
     }
 
     // Update status and notes
     application.status = status;
-    if (notes !== undefined) {
-      application.notes = notes;
+    if (notes !== undefined && notes !== null) {
+      application.notes = String(notes).trim();
+    } else if (notes === null || notes === '') {
+      // Allow clearing notes by sending empty string or null
+      application.notes = '';
     }
 
     await job.save();
@@ -521,7 +550,7 @@ router.patch('/:jobId/applications/:applicationId/status', auth, [
     });
   } catch (error) {
     console.error('Update application status error:', error);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: error.message || 'Server error' });
   }
 });
 

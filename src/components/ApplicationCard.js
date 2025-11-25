@@ -101,6 +101,11 @@ export default function ApplicationCard({ application, jobId, applicationId, onU
         }
         const formatted = parts.filter(Boolean).join(' • ');
         if (formatted) return formatted;
+        // Fallback: if no formatted string, try to create one from available fields
+        const fallbackParts = [degree, field, institution].filter(Boolean);
+        if (fallbackParts.length > 0) return fallbackParts.join(' • ');
+        // Last resort: return school name or empty string
+        return institution || '';
       } else if (label === 'Work Experience') {
         const role = item.role || item.title || item.position;
         const company = item.company || item.organization || item.employer;
@@ -176,7 +181,13 @@ export default function ApplicationCard({ application, jobId, applicationId, onU
       setShowStatusForm(false);
       onUpdate?.(response.data.application);
     } catch (error) {
-      showError(error.response?.data?.error || 'Failed to update status');
+      // Handle validation errors
+      if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
+        const errorMessages = error.response.data.errors.map(err => err.msg || err.message).join(', ');
+        showError(errorMessages || 'Validation failed');
+      } else {
+        showError(error.response?.data?.error || error.message || 'Failed to update status');
+      }
     } finally {
       setIsUpdatingStatus(false);
     }
@@ -218,11 +229,15 @@ export default function ApplicationCard({ application, jobId, applicationId, onU
       <div style={{ marginTop: '8px' }}>
         <strong style={{ color: '#333', fontSize: '14px' }}>{label}:</strong>
         <ul style={{ paddingLeft: '16px', margin: '6px 0', color: '#555', fontSize: '13px' }}>
-          {formattedItems.slice(0, 5).map((item, idx) => (
-            <li key={`${label}-${idx}`} style={{ marginBottom: '2px' }}>
-              {typeof item === 'string' && item.length > 100 ? `${item.substring(0, 100)}...` : item}
-            </li>
-          ))}
+          {formattedItems.slice(0, 5).map((item, idx) => {
+            // Ensure item is always a string
+            const itemText = typeof item === 'string' ? item : (typeof item === 'object' ? JSON.stringify(item) : String(item || ''));
+            return (
+              <li key={`${label}-${idx}`} style={{ marginBottom: '2px' }}>
+                {itemText.length > 100 ? `${itemText.substring(0, 100)}...` : itemText}
+              </li>
+            );
+          })}
           {formattedItems.length > 5 && (
             <li style={{ color: '#888', fontStyle: 'italic' }}>
               +{formattedItems.length - 5} more...

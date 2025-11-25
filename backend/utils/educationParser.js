@@ -394,8 +394,11 @@ function parseEducationSection(text) {
     const line = lines[i];
     const lower = line.toLowerCase();
     
-    // Detect education section header
-    if (/^(education|academic|qualifications|academic\s+background)/i.test(lower) && line.length < 30) {
+    // Detect education section header (with or without emojis)
+    const cleanedLine = line.replace(/[^\w\s:]/g, '').trim().toLowerCase();
+    if ((/^(education|academic|qualifications|academic\s+background)/i.test(lower) || 
+         /^(education|academic|qualifications|academic\s+background)/i.test(cleanedLine)) && 
+        (line.length < 50 || cleanedLine.length < 50)) {
       inEducationSection = true;
       currentEntry = null;
       entryLines = [];
