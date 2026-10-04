@@ -374,11 +374,6 @@ export default function ApplicationCard({ application, jobId, applicationId, onU
               </div>
             </div>
           )}
-          {typeof experienceYears === 'number' && (
-            <p style={{ margin: '4px 0', color: '#666', fontSize: '14px' }}>
-              <strong>Experience:</strong> {experienceYears} years
-            </p>
-          )}
           {languages.length > 0 && (
             <p style={{ margin: '4px 0', color: '#666', fontSize: '14px' }}>
               <strong>Languages:</strong> {languages.join(', ')}

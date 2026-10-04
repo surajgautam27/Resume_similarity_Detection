@@ -29,7 +29,12 @@ const resumeSchema = new mongoose.Schema({
     name: String,
     email: String,
     phone: String,
-    location: String
+    location: String,
+    linkedin: String,
+    github: String,
+    portfolio: String,
+    website: String,
+    twitter: String
   },
   skills: {
     type: [String],

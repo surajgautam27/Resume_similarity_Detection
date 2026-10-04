@@ -1,31 +1,22 @@
-const OpenAI = require('openai');
+const axios = require('axios');
 
-// Initialize OpenAI client (optional - works without API key)
-const openai = process.env.OPENAI_API_KEY 
-  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-  : null;
-
-// Use more powerful model if available, fallback to mini for cost efficiency
-const AI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini'; // Options: gpt-4o, gpt-4-turbo, gpt-4o-mini
+// Ollama configuration
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3'; // Options: llama3, llama3.1, mistral, phi3, etc.
 
 /**
- * Enhanced resume parser using OpenAI API with advanced NLP capabilities
+ * Enhanced resume parser using Ollama (Llama 3) - Free and Open Source
  * Uses structured JSON schema for accurate extraction
  */
-async function parseResumeWithAI(extractedText) {
-  if (!openai) {
-    console.log('OpenAI API key not found, using fallback parser');
-    return null;
-  }
-
+async function parseResumeWithOllama(extractedText) {
   if (!extractedText || extractedText.trim().length < 50) {
-    console.log('Text too short for AI parsing');
+    console.log('Text too short for Ollama parsing');
     return null;
   }
 
   try {
-    // Truncate text to fit token limits (keep more context for better parsing)
-    const maxTextLength = AI_MODEL.includes('gpt-4') ? 15000 : 12000;
+    // Truncate text to fit token limits (Llama 3 can handle ~8000 tokens)
+    const maxTextLength = 15000;
     const resumeText = extractedText.substring(0, maxTextLength);
 
     const systemPrompt = `You are an expert resume parser with deep understanding of professional resumes, CVs, and career documents. Your task is to extract structured information with high accuracy.
@@ -70,7 +61,7 @@ Return a JSON object with this exact structure:
       "startDate": "YYYY-MM or YYYY format",
       "endDate": "YYYY-MM, YYYY, or 'Present'",
       "description": "Full job description with responsibilities and achievements",
-      "technologies": ["tech1", "tech2"] // Technologies/tools used in this role
+      "technologies": ["tech1", "tech2"]
     }
   ],
   "education": [
@@ -85,9 +76,9 @@ Return a JSON object with this exact structure:
     }
   ],
   "skills": {
-    "technical": ["skill1", "skill2"], // Programming languages, frameworks, tools
-    "soft": ["skill1", "skill2"], // Soft skills, interpersonal skills
-    "languages": ["language1", "language2"], // Spoken languages with proficiency if mentioned
+    "technical": ["skill1", "skill2"],
+    "soft": ["skill1", "skill2"],
+    "languages": ["language1", "language2"],
     "certifications": [
       {
         "name": "Certification name",
@@ -106,8 +97,8 @@ Return a JSON object with this exact structure:
       "date": "YYYY-MM or YYYY if mentioned"
     }
   ],
-  "achievements": ["achievement1", "achievement2"], // Awards, honors, publications, etc.
-  "experienceYears": 0 // Total years of professional experience (calculated)
+  "achievements": ["achievement1", "achievement2"],
+  "experienceYears": 0
 }
 
 Important:
@@ -115,37 +106,56 @@ Important:
 - Extract ALL skills mentioned, normalize to standard names
 - Include incomplete information if it's clearly stated
 - For dates, prefer YYYY-MM format, fallback to YYYY, or use descriptive text if needed
-- Extract full descriptions, not summaries`;
+- Extract full descriptions, not summaries
+- Return ONLY the JSON object, no additional text or markdown formatting`;
 
-    const response = await openai.chat.completions.create({
-      model: AI_MODEL,
-      messages: [
-        {
-          role: 'system',
-          content: systemPrompt
-        },
-        {
-          role: 'user',
-          content: userPrompt
-        }
-      ],
-      temperature: 0.1, // Low temperature for consistent, accurate extraction
-      max_tokens: AI_MODEL.includes('gpt-4') ? 4000 : 3000, // More tokens for detailed extraction
-      response_format: { type: 'json_object' }
+    const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
+
+    const response = await axios.post(`${OLLAMA_BASE_URL}/api/generate`, {
+      model: OLLAMA_MODEL,
+      prompt: fullPrompt,
+      stream: false,
+      options: {
+        temperature: 0.1, // Low temperature for consistent, accurate extraction
+        num_predict: 4000, // Maximum tokens to generate
+        top_p: 0.9,
+        top_k: 40
+      },
+      format: 'json' // Request JSON format (if supported by model)
+    }, {
+      timeout: 120000 // 2 minutes timeout for large resumes
     });
 
+    let jsonText = '';
+    
+    // Handle streaming response (Ollama may return stream even with stream: false in some versions)
+    if (response.data.response) {
+      jsonText = response.data.response;
+    } else if (response.data.text) {
+      jsonText = response.data.text;
+    } else {
+      // Try to get from response directly
+      jsonText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+    }
+
+    // Clean up the response - remove markdown code blocks if present
+    jsonText = jsonText.trim();
+    jsonText = jsonText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+    
+    // Try to extract JSON if wrapped in other text
     let parsedData;
     try {
-      parsedData = JSON.parse(response.choices[0].message.content);
+      parsedData = JSON.parse(jsonText);
     } catch (parseError) {
-      console.error('Failed to parse AI response as JSON:', parseError);
-      // Try to extract JSON from response if it's wrapped in markdown
-      const jsonMatch = response.choices[0].message.content.match(/```json\s*([\s\S]*?)\s*```/) ||
-                       response.choices[0].message.content.match(/\{[\s\S]*\}/);
+      // Try to extract JSON from response if it's wrapped in markdown or text
+      const jsonMatch = jsonText.match(/```json\s*([\s\S]*?)\s*```/) ||
+                       jsonText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         parsedData = JSON.parse(jsonMatch[1] || jsonMatch[0]);
       } else {
-        throw new Error('Invalid JSON response from AI');
+        console.error('Failed to parse Ollama response as JSON:', parseError.message);
+        console.error('Response text:', jsonText.substring(0, 500));
+        throw new Error('Invalid JSON response from Ollama');
       }
     }
     
@@ -222,15 +232,31 @@ Important:
     }
     
     // Extract certifications from skills object if present
-    if (parsedData.skills && parsedData.skills.certifications) {
+    if (parsedData.skills && typeof parsedData.skills === 'object' && parsedData.skills.certifications) {
       parsedData.certifications = parsedData.skills.certifications.map(cert => 
         typeof cert === 'string' ? cert : cert.name || cert
       );
     }
     
+    // Ensure social links are properly formatted
+    if (parsedData.linkedin && !parsedData.linkedin.startsWith('http')) {
+      parsedData.linkedin = `https://www.linkedin.com/in/${parsedData.linkedin.replace(/^.*\//, '')}`;
+    }
+    if (parsedData.github && !parsedData.github.startsWith('http')) {
+      parsedData.github = `https://github.com/${parsedData.github.replace(/^.*\//, '')}`;
+    }
+    if (parsedData.portfolio && !parsedData.portfolio.startsWith('http')) {
+      parsedData.portfolio = `https://${parsedData.portfolio}`;
+    }
+    
     return parsedData;
   } catch (error) {
-    console.error('AI parsing error:', error.message);
+    console.error('Ollama parsing error:', error.message);
+    if (error.code === 'ECONNREFUSED') {
+      console.error('Ollama is not running. Please start Ollama service: ollama serve');
+    } else if (error.response) {
+      console.error('Ollama API error:', error.response.status, error.response.data);
+    }
     return null;
   }
 }
@@ -352,32 +378,23 @@ function parseDate(dateStr) {
 }
 
 /**
- * Advanced AI parser with retry logic and fallback
+ * Advanced Ollama parser with retry logic and fallback
  * Use this for maximum accuracy
  */
-async function parseResumeWithAIAdvanced(extractedText, options = {}) {
+async function parseResumeWithOllamaAdvanced(extractedText, options = {}) {
   const maxRetries = options.maxRetries || 2;
-  const useBetterModel = options.useBetterModel || false;
   
   let lastError = null;
   
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      // On retry, optionally use a better model
-      if (attempt > 0 && useBetterModel && process.env.OPENAI_API_KEY) {
-        const originalModel = AI_MODEL;
-        const betterModel = originalModel.includes('mini') ? 'gpt-4o' : 'gpt-4-turbo';
-        console.log(`Retrying with better model: ${betterModel}`);
-        // Temporarily override model (would need refactoring to support this)
-      }
-      
-      const result = await parseResumeWithAI(extractedText);
+      const result = await parseResumeWithOllama(extractedText);
       if (result && Object.keys(result).length > 0) {
         return result;
       }
     } catch (error) {
       lastError = error;
-      console.log(`AI parsing attempt ${attempt + 1} failed:`, error.message);
+      console.log(`Ollama parsing attempt ${attempt + 1} failed:`, error.message);
       if (attempt < maxRetries - 1) {
         // Wait before retry (exponential backoff)
         await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
@@ -385,20 +402,31 @@ async function parseResumeWithAIAdvanced(extractedText, options = {}) {
     }
   }
   
-  console.error('All AI parsing attempts failed:', lastError?.message);
+  console.error('All Ollama parsing attempts failed:', lastError?.message);
   return null;
 }
 
 /**
- * Check if AI parser is available
+ * Check if Ollama parser is available
  */
-function isAIParserAvailable() {
-  return !!openai && !!process.env.OPENAI_API_KEY;
+async function isOllamaParserAvailable() {
+  try {
+    const response = await axios.get(`${OLLAMA_BASE_URL}/api/tags`, {
+      timeout: 5000
+    });
+    // Check if the model is available
+    const models = response.data.models || [];
+    const modelAvailable = models.some(m => m.name.includes(OLLAMA_MODEL));
+    return modelAvailable;
+  } catch (error) {
+    console.log('Ollama not available:', error.message);
+    return false;
+  }
 }
 
 module.exports = {
-  parseResumeWithAI,
-  parseResumeWithAIAdvanced,
-  isAIParserAvailable
+  parseResumeWithOllama,
+  parseResumeWithOllamaAdvanced,
+  isOllamaParserAvailable
 };
 

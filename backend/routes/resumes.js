@@ -8,10 +8,10 @@ const Resume = require('../models/Resume');
 const Job = require('../models/Job');
 const User = require('../models/User');
 const { extractSkills, extractCandidateInfo, extractResumeDetails } = require('../utils/resumeParser');
-const { parseResumeWithAI, parseResumeWithAIAdvanced, isAIParserAvailable } = require('../utils/aiResumeParser');
+const { parseResumeWithOllama, parseResumeWithOllamaAdvanced, isOllamaParserAvailable } = require('../utils/ollamaResumeParser');
 const { parseResumeEnhanced } = require('../utils/advancedResumeParser');
 const { parseResumeWithPyresparser, isPyresparserAvailable } = require('../utils/pyresParserWrapper');
-const { parseResumeStructured } = require('../utils/structuredResumeParser');
+const { parseResumeStructured, extractSocialLinks } = require('../utils/structuredResumeParser');
 const { parseEducationSection } = require('../utils/educationParser');
 const { parseWorkExperienceSection, extractWorkExperienceEntry } = require('../utils/workExperienceParser');
 
@@ -241,6 +241,26 @@ const syncUserProfileFromResume = async (userId, resumeDoc) => {
         profile.bio = trimmedSummary;
       }
     }
+    
+    // Update social links from resume
+    if (resumeDoc.candidate) {
+      profile.social = profile.social || {};
+      if (resumeDoc.candidate.linkedin && !profile.social.linkedin) {
+        profile.social.linkedin = resumeDoc.candidate.linkedin;
+      }
+      if (resumeDoc.candidate.github && !profile.social.github) {
+        profile.social.github = resumeDoc.candidate.github;
+      }
+      if (resumeDoc.candidate.portfolio && !profile.social.website) {
+        profile.social.website = resumeDoc.candidate.portfolio;
+      }
+      if (resumeDoc.candidate.website && !profile.social.website) {
+        profile.social.website = resumeDoc.candidate.website;
+      }
+      if (resumeDoc.candidate.twitter && !profile.social.twitter) {
+        profile.social.twitter = resumeDoc.candidate.twitter;
+      }
+    }
 
     // Merge skills
     if (resumeDoc.skills?.length) {
@@ -375,25 +395,25 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
     });
 
     // Try parsers in order of accuracy
-    // Priority: AI (if available) -> Structured -> Pyresparser -> Enhanced -> Basic
-    // AI parser provides the most accurate extraction when OpenAI API key is configured
+    // Priority: Ollama (Llama 3 - Free & Open Source) -> Structured -> Pyresparser -> Enhanced -> Basic
+    // Ollama parser provides the most accurate extraction using free local LLM
     let structuredParsedData = null;
     let pyresparserData = null;
     let aiParsedData = null;
     let enhancedParsedData = null;
     
-    // Try AI parsing first if available (most accurate with NLP/generative AI)
-    const aiAvailable = isAIParserAvailable();
-    if (aiAvailable) {
+    // Try Ollama parsing first if available (most accurate with free local LLM)
+    const ollamaAvailable = await isOllamaParserAvailable();
+    if (ollamaAvailable) {
       try {
-        aiParsedData = await parseResumeWithAI(extractedText);
+        aiParsedData = await parseResumeWithOllama(extractedText);
         if (aiParsedData && Object.keys(aiParsedData).length > 0) {
-          console.log('AI parsing successful (using generative AI/NLP)');
+          console.log('Ollama parsing successful (using Llama 3 - Free & Open Source)');
         } else {
           aiParsedData = null;
         }
       } catch (error) {
-        console.log('AI parsing failed, trying structured parser:', error.message);
+        console.log('Ollama parsing failed, trying structured parser:', error.message);
         aiParsedData = null;
       }
     }
@@ -510,7 +530,12 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
         name: aiParsedData.name || '',
         email: aiParsedData.email || '',
         phone: aiParsedData.phone || '',
-        location: aiParsedData.location || ''
+        location: aiParsedData.location || '',
+        linkedin: aiParsedData.linkedin || '',
+        github: aiParsedData.github || '',
+        portfolio: aiParsedData.portfolio || '',
+        website: aiParsedData.portfolio || aiParsedData.website || '',
+        twitter: aiParsedData.twitter || ''
       };
       
       // Add AI skills to allSkills Set
@@ -637,6 +662,19 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
     if (!candidateBasics || !candidateBasics.name) {
       candidateBasics = candidateBasics || {};
       candidateBasics.name = candidateBasics.name || req.file.originalname.replace(/\.pdf$/i, '').replace(/[-_]/g, ' ').trim() || 'Unknown';
+    }
+    
+    // Extract social links from text if not already extracted
+    if (!candidateBasics.linkedin && !candidateBasics.github && !candidateBasics.portfolio) {
+      const extractedSocialLinks = extractSocialLinks(extractedText);
+      candidateBasics = {
+        ...candidateBasics,
+        linkedin: candidateBasics.linkedin || extractedSocialLinks.linkedin || '',
+        github: candidateBasics.github || extractedSocialLinks.github || '',
+        portfolio: candidateBasics.portfolio || extractedSocialLinks.portfolio || '',
+        website: candidateBasics.website || extractedSocialLinks.website || extractedSocialLinks.portfolio || '',
+        twitter: candidateBasics.twitter || extractedSocialLinks.twitter || ''
+      };
     }
     
     // Merge skills from all successful parsers
@@ -960,7 +998,7 @@ router.post('/upload', auth, upload.single('resume'), async (req, res) => {
       certificationEntries: certificationEntries.length,
       summaryText: summaryText ? summaryText.substring(0, 100) + '...' : '',
       experienceYears,
-      parsingMethod: structuredParsedData ? 'Structured' : pyresparserData ? 'Pyresparser' : aiParsedData ? 'AI' : enhancedParsedData ? 'Enhanced' : 'Basic',
+      parsingMethod: structuredParsedData ? 'Structured' : pyresparserData ? 'Pyresparser' : aiParsedData ? 'Ollama (Llama 3)' : enhancedParsedData ? 'Enhanced' : 'Basic',
       hasParsedData: !!parsedDataToStore
     });
 
@@ -1088,22 +1126,22 @@ router.post('/upload-multiple', auth, upload.array('resumes', 10), async (req, r
           continue; // Skip to next file
         }
 
-        // Try parsers in order: AI (if available) -> Structured -> Pyresparser -> Enhanced -> Basic
+        // Try parsers in order: Ollama (if available) -> Structured -> Pyresparser -> Enhanced -> Basic
         let structuredParsedData = null;
         let pyresparserData = null;
         let aiParsedData = null;
         let enhancedParsedData = null;
         
-        // Try AI parsing first if available (most accurate with NLP/generative AI)
-        const aiAvailable = isAIParserAvailable();
-        if (aiAvailable) {
+        // Try Ollama parsing first if available (most accurate with free local LLM)
+        const ollamaAvailable = await isOllamaParserAvailable();
+        if (ollamaAvailable) {
           try {
-            aiParsedData = await parseResumeWithAI(extractedText);
+            aiParsedData = await parseResumeWithOllama(extractedText);
             if (!aiParsedData || Object.keys(aiParsedData).length === 0) {
               aiParsedData = null;
             }
           } catch (error) {
-            console.log(`AI parsing failed for ${file.originalname}, trying structured parser:`, error.message);
+            console.log(`Ollama parsing failed for ${file.originalname}, trying structured parser:`, error.message);
             aiParsedData = null;
           }
         }
@@ -1189,7 +1227,12 @@ router.post('/upload-multiple', auth, upload.array('resumes', 10), async (req, r
             name: aiParsedData.name || '',
             email: aiParsedData.email || '',
             phone: aiParsedData.phone || '',
-            location: aiParsedData.location || ''
+            location: aiParsedData.location || '',
+            linkedin: aiParsedData.linkedin || '',
+            github: aiParsedData.github || '',
+            portfolio: aiParsedData.portfolio || '',
+            website: aiParsedData.portfolio || aiParsedData.website || '',
+            twitter: aiParsedData.twitter || ''
           };
           
           skills = aiParsedData.skills || [];
@@ -1264,6 +1307,19 @@ router.post('/upload-multiple', auth, upload.array('resumes', 10), async (req, r
             : (typeof candidateExperience === 'number' && candidateExperience > 0 ? candidateExperience : 0);
         }
 
+        // Extract social links from text if not already extracted
+        if (!candidateBasics.linkedin && !candidateBasics.github && !candidateBasics.portfolio) {
+          const extractedSocialLinks = extractSocialLinks(extractedText);
+          candidateBasics = {
+            ...candidateBasics,
+            linkedin: candidateBasics.linkedin || extractedSocialLinks.linkedin || '',
+            github: candidateBasics.github || extractedSocialLinks.github || '',
+            portfolio: candidateBasics.portfolio || extractedSocialLinks.portfolio || '',
+            website: candidateBasics.website || extractedSocialLinks.website || extractedSocialLinks.portfolio || '',
+            twitter: candidateBasics.twitter || extractedSocialLinks.twitter || ''
+          };
+        }
+        
         // Always use advanced education parser to ensure best results
         if (extractedText) {
           try {
@@ -1393,9 +1449,9 @@ router.post('/upload-multiple', auth, upload.array('resumes', 10), async (req, r
           };
         } else if (aiParsedData) {
           parsedDataToStore = {
-            source: 'ai',
+            source: 'ollama',
             data: aiParsedData,
-            parsingMethod: 'AI'
+            parsingMethod: 'Ollama (Llama 3)'
           };
         } else if (enhancedParsedData) {
           parsedDataToStore = {
@@ -1667,24 +1723,24 @@ router.put('/:id/reparse', auth, async (req, res) => {
       });
     }
 
-    // Try parsers in order of accuracy: AI (if available) -> Structured -> Pyresparser -> Enhanced -> Basic
+    // Try parsers in order of accuracy: Ollama (if available) -> Structured -> Pyresparser -> Enhanced -> Basic
     let structuredParsedData = null;
     let pyresparserData = null;
     let aiParsedData = null;
     let enhancedParsedData = null;
     
-    // Try AI parsing first if available (most accurate with NLP/generative AI)
-    const aiAvailable = isAIParserAvailable();
-    if (aiAvailable) {
+    // Try Ollama parsing first if available (most accurate with free local LLM)
+    const ollamaAvailable = await isOllamaParserAvailable();
+    if (ollamaAvailable) {
       try {
-        aiParsedData = await parseResumeWithAI(extractedText);
+        aiParsedData = await parseResumeWithOllama(extractedText);
         if (aiParsedData && Object.keys(aiParsedData).length > 0) {
-          console.log('AI parsing successful (using generative AI/NLP)');
+          console.log('Ollama parsing successful (using Llama 3 - Free & Open Source)');
         } else {
           aiParsedData = null;
         }
       } catch (error) {
-        console.log('AI parsing failed, trying structured parser:', error.message);
+        console.log('Ollama parsing failed, trying structured parser:', error.message);
         aiParsedData = null;
       }
     }
@@ -1766,7 +1822,12 @@ router.put('/:id/reparse', auth, async (req, res) => {
         name: aiParsedData.name || '',
         email: aiParsedData.email || '',
         phone: aiParsedData.phone || '',
-        location: aiParsedData.location || ''
+        location: aiParsedData.location || '',
+        linkedin: aiParsedData.linkedin || '',
+        github: aiParsedData.github || '',
+        portfolio: aiParsedData.portfolio || '',
+        website: aiParsedData.portfolio || aiParsedData.website || '',
+        twitter: aiParsedData.twitter || ''
       };
       
       skills = aiParsedData.skills || [];
@@ -1842,6 +1903,19 @@ router.put('/:id/reparse', auth, async (req, res) => {
         console.error('Basic parser also failed:', parseError.message);
         return res.status(500).json({ error: 'Failed to parse resume' });
       }
+    }
+    
+    // Extract social links from text if not already extracted
+    if (!candidateBasics.linkedin && !candidateBasics.github && !candidateBasics.portfolio) {
+      const extractedSocialLinks = extractSocialLinks(extractedText);
+      candidateBasics = {
+        ...candidateBasics,
+        linkedin: candidateBasics.linkedin || extractedSocialLinks.linkedin || '',
+        github: candidateBasics.github || extractedSocialLinks.github || '',
+        portfolio: candidateBasics.portfolio || extractedSocialLinks.portfolio || '',
+        website: candidateBasics.website || extractedSocialLinks.website || extractedSocialLinks.portfolio || '',
+        twitter: candidateBasics.twitter || extractedSocialLinks.twitter || ''
+      };
     }
     
     // Always use advanced education parser

@@ -111,23 +111,139 @@ const SKILLS_DATABASE = {
 };
 
 /**
+ * Extract social links from resume text
+ */
+function extractSocialLinks(text) {
+  const socialLinks = {
+    linkedin: '',
+    github: '',
+    portfolio: '',
+    website: '',
+    twitter: ''
+  };
+
+  // LinkedIn patterns
+  const linkedinPatterns = [
+    /(?:linkedin\.com\/in\/|linkedin\.com\/profile\/|linkedin\.com\/pub\/)([a-zA-Z0-9\-_]+)/gi,
+    /(?:linkedin:?\s*)(?:https?:\/\/)?(?:www\.)?linkedin\.com\/(?:in|profile|pub)\/([a-zA-Z0-9\-_]+)/gi,
+    /(?:linkedin:?\s*)(https?:\/\/[^\s]+linkedin[^\s]+)/gi
+  ];
+  
+  for (const pattern of linkedinPatterns) {
+    const matches = text.match(pattern);
+    if (matches && matches[0]) {
+      let url = matches[0].replace(/linkedin:?\s*/i, '').trim();
+      if (!url.startsWith('http')) {
+        url = `https://www.linkedin.com/in/${matches[1] || matches[0].split('/').pop()}`;
+      }
+      socialLinks.linkedin = url;
+      break;
+    }
+  }
+
+  // GitHub patterns
+  const githubPatterns = [
+    /(?:github\.com\/)([a-zA-Z0-9\-_]+)/gi,
+    /(?:github:?\s*)(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9\-_]+)/gi,
+    /(?:github:?\s*)(https?:\/\/[^\s]+github[^\s]+)/gi
+  ];
+  
+  for (const pattern of githubPatterns) {
+    const matches = text.match(pattern);
+    if (matches && matches[0]) {
+      let url = matches[0].replace(/github:?\s*/i, '').trim();
+      if (!url.startsWith('http')) {
+        url = `https://github.com/${matches[1] || matches[0].split('/').pop()}`;
+      }
+      socialLinks.github = url;
+      break;
+    }
+  }
+
+  // Portfolio/Website patterns
+  const portfolioPatterns = [
+    /(?:portfolio:?\s*|website:?\s*|personal\s+website:?\s*)(https?:\/\/[^\s]+)/gi,
+    /(?:portfolio:?\s*|website:?\s*)(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9\-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?)/gi
+  ];
+  
+  for (const pattern of portfolioPatterns) {
+    const matches = text.match(pattern);
+    if (matches && matches[0]) {
+      let url = matches[0].replace(/(?:portfolio|website|personal\s+website):?\s*/i, '').trim();
+      if (!url.startsWith('http')) {
+        url = `https://${url}`;
+      }
+      // Skip if it's LinkedIn or GitHub
+      if (!url.includes('linkedin') && !url.includes('github')) {
+        socialLinks.portfolio = url;
+        socialLinks.website = url;
+        break;
+      }
+    }
+  }
+
+  // Twitter patterns
+  const twitterPatterns = [
+    /(?:twitter\.com\/)([a-zA-Z0-9_]+)/gi,
+    /(?:twitter:?\s*|x\.com\/)(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com)\/([a-zA-Z0-9_]+)/gi,
+    /(?:twitter:?\s*)(https?:\/\/[^\s]+(?:twitter|x\.com)[^\s]+)/gi
+  ];
+  
+  for (const pattern of twitterPatterns) {
+    const matches = text.match(pattern);
+    if (matches && matches[0]) {
+      let url = matches[0].replace(/twitter:?\s*/i, '').trim();
+      if (!url.startsWith('http')) {
+        url = `https://twitter.com/${matches[1] || matches[0].split('/').pop()}`;
+      }
+      socialLinks.twitter = url;
+      break;
+    }
+  }
+
+  return socialLinks;
+}
+
+/**
  * Extract contact information from resume text
  */
 function extractContactInfo(text) {
   const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
   
-  // Extract name (usually first non-empty line, but skip if it's a section header)
+  // Improved name extraction - look for name patterns in first 5 lines
   let name = '';
-  for (let i = 0; i < Math.min(3, lines.length); i++) {
+  const namePatterns = [
+    /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}$/, // "John Doe" or "John Michael Doe"
+    /^[A-Z][a-z]+\s+[A-Z]\.\s+[A-Z][a-z]+$/, // "John M. Doe"
+    /^[A-Z][a-z]+\s+[A-Z][a-z]+$/ // "John Doe"
+  ];
+  
+  for (let i = 0; i < Math.min(5, lines.length); i++) {
     const line = lines[i];
     const lower = line.toLowerCase();
-    // Skip section headers
-    if (!/^(experience|education|skills|projects|summary|contact)/i.test(lower) && 
-        line.length > 2 && line.length < 50 && 
-        /^[A-Z][a-z]+(\s+[A-Z][a-z]+)+/.test(line)) {
-      name = line;
-      break;
+    
+    // Skip if it's clearly not a name
+    if (line.length < 3 || line.length > 60) continue;
+    if (/@|http|phone|email|linkedin|github|portfolio|twitter|experience|education|skills|projects|summary|contact|resume|cv/i.test(lower)) continue;
+    if (/\d{3,}/.test(line)) continue; // Contains numbers (likely phone or year)
+    if (/^[^A-Z]/.test(line)) continue; // Doesn't start with capital letter
+    
+    // Check if it matches name patterns
+    for (const pattern of namePatterns) {
+      if (pattern.test(line)) {
+        // Additional validation: should have 2-4 words, mostly letters
+        const words = line.split(/\s+/);
+        if (words.length >= 2 && words.length <= 4) {
+          const allWordsValid = words.every(word => /^[A-Z][a-z]+(?:\.|')?$/.test(word) || /^[A-Z]\.$/.test(word));
+          if (allWordsValid) {
+            name = line;
+            break;
+          }
+        }
+      }
     }
+    
+    if (name) break;
   }
   
   // Extract email (get first valid email)
@@ -170,7 +286,10 @@ function extractContactInfo(text) {
     }
   }
   
-  return { name, email, phone, location };
+  // Extract social links
+  const socialLinks = extractSocialLinks(text);
+  
+  return { name, email, phone, location, ...socialLinks };
 }
 
 /**
@@ -745,6 +864,7 @@ function parseResumeStructured(text) {
 module.exports = {
   parseResumeStructured,
   extractContactInfo,
+  extractSocialLinks,
   extractSkills,
   extractStructuredSections,
   extractExperienceYears,

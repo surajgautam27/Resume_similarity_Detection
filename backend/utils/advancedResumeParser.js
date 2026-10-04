@@ -1,5 +1,6 @@
 const natural = require('natural');
 const nlp = require('compromise');
+const { extractSocialLinks } = require('./structuredResumeParser');
 
 // Enhanced skills database with more variations and synonyms
 const ENHANCED_SKILLS_DB = {
@@ -291,19 +292,41 @@ function extractEnhancedContact(text) {
   const phoneRegex = /(?:\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})|(?:\+\d{1,3}[-.\s]?)?\d{10,14}/g;
   const phones = text.match(phoneRegex) || [];
   
-  // Name extraction (first few lines, excluding email/phone)
+  // Improved name extraction - look for name patterns in first 5 lines
   const lines = text.split('\n').slice(0, 5);
   let name = '';
+  const namePatterns = [
+    /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}$/, // "John Doe" or "John Michael Doe"
+    /^[A-Z][a-z]+\s+[A-Z]\.\s+[A-Z][a-z]+$/, // "John M. Doe"
+    /^[A-Z][a-z]+\s+[A-Z][a-z]+$/ // "John Doe"
+  ];
+  
   for (const line of lines) {
     const cleanLine = line.trim();
-    if (cleanLine.length > 2 && 
-        !cleanLine.includes('@') && 
-        !cleanLine.match(/\d{3}/) && 
-        !cleanLine.toLowerCase().includes('resume') &&
-        cleanLine.match(/^[a-zA-Z\s.'-]+$/)) {
-      name = cleanLine;
-      break;
+    const lower = cleanLine.toLowerCase();
+    
+    // Skip if it's clearly not a name
+    if (cleanLine.length < 3 || cleanLine.length > 60) continue;
+    if (/@|http|phone|email|linkedin|github|portfolio|twitter|experience|education|skills|projects|summary|contact|resume|cv/i.test(lower)) continue;
+    if (/\d{3,}/.test(cleanLine)) continue; // Contains numbers (likely phone or year)
+    if (/^[^A-Z]/.test(cleanLine)) continue; // Doesn't start with capital letter
+    
+    // Check if it matches name patterns
+    for (const pattern of namePatterns) {
+      if (pattern.test(cleanLine)) {
+        // Additional validation: should have 2-4 words, mostly letters
+        const words = cleanLine.split(/\s+/);
+        if (words.length >= 2 && words.length <= 4) {
+          const allWordsValid = words.every(word => /^[A-Z][a-z]+(?:\.|')?$/.test(word) || /^[A-Z]\.$/.test(word));
+          if (allWordsValid) {
+            name = cleanLine;
+            break;
+          }
+        }
+      }
     }
+    
+    if (name) break;
   }
   
   // Location extraction using NLP
@@ -311,11 +334,15 @@ function extractEnhancedContact(text) {
   const places = doc.places().out('array');
   const location = places.length > 0 ? places[0] : '';
   
+  // Extract social links
+  const socialLinks = extractSocialLinks(text);
+  
   return {
     name: name || '',
     email: emails[0] || '',
     phone: phones[0] ? phones[0].replace(/[-.\s()]/g, '') : '',
-    location: location || ''
+    location: location || '',
+    ...socialLinks
   };
 }
 

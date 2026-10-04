@@ -173,7 +173,6 @@ export default function Application() {
                         <div><b>Name:</b> {resume.candidate?.name || resume.uploadedBy?.name || 'Unknown'}</div>
                         <div><b>Email:</b> {resume.candidate?.email || resume.uploadedBy?.email || 'N/A'}</div>
                         <div><b>Skills:</b> {resume.skills?.join(', ') || 'N/A'}</div>
-                        <div><b>Experience:</b> {resume.experience || 'N/A'} years</div>
                         <div><b>Resume Filename:</b> {resume.originalName || resume.filename}</div>
                         <div><b>Uploaded By:</b> {resume.uploadedBy?.name || 'Unknown'}</div>
                         <div><b>Upload Date:</b> {resume.createdAt ? new Date(resume.createdAt).toLocaleDateString() : 'N/A'}</div>

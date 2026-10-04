@@ -212,11 +212,6 @@ export default function Resumes() {
                         <strong>Location:</strong> {resume.candidate.location}
                       </p>
                     )}
-                    {typeof resume.experience === 'number' && (
-                      <p style={{ margin: '4px 0', color: '#6c757d', fontSize: '14px' }}>
-                        <strong>Experience:</strong> {resume.experience} years
-                      </p>
-                    )}
                     {resume.summary && (
                       <p style={{ margin: '8px 0', color: '#4a4a4a', fontSize: '14px', lineHeight: 1.6 }}>
                         {resume.summary}
