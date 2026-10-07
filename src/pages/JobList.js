@@ -19,7 +19,7 @@ export default function JobList() {
       setLoading(true);
       try {
         const [jobsRes, resumesRes] = await Promise.all([
-          axios.get(`${API_URL}/jobs`),
+          axios.get(`${API_URL}/jobs`, { params: { limit: 100 } }),
           axios.get(`${API_URL}/resumes`)
         ]);
         setJobs(jobsRes.data.jobs || []);
@@ -173,9 +173,31 @@ export default function JobList() {
             <li key={job._id} style={{ border: '1px solid #eee', borderRadius: 6, marginBottom: 16, padding: 16 }}>
               <h3>{job.title}</h3>
               <p><b>Description:</b> {job.description}</p>
-              <p><b>Location:</b> {job.location}</p>
+              <p><b>Location:</b> {job.location || 'Not specified'}</p>
               <p><b>Type:</b> {job.type}</p>
+              <p><b>Experience:</b> {job.experience || 'Not specified'}</p>
               <p><b>Company:</b> {job.company || (job.createdBy && job.createdBy.name)}</p>
+              {(job.salary?.min || job.salary?.max) && (
+                <p>
+                  <b>Salary:</b> {job.salary.currency || 'USD'} {job.salary.min || '?'}–{job.salary.max || '?'}
+                </p>
+              )}
+              {(job.skills || []).length > 0 && (
+                <p><b>Skills:</b> {job.skills.join(', ')}</p>
+              )}
+              {(job.requirements || []).length > 0 && (
+                <div>
+                  <b>Requirements:</b>
+                  <ul>
+                    {job.requirements.map((req) => (
+                      <li key={req}>{req}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {(job.tags || []).length > 0 && (
+                <p><b>Tags:</b> {job.tags.join(', ')}</p>
+              )}
               
               {/* Link to company profile */}
               {job.createdBy?._id && (

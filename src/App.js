@@ -116,7 +116,9 @@ function App() {
                   path="/login" 
                   element={
                     <PublicRoute>
-                      <Login />
+                      <Layout>
+                        <Login />
+                      </Layout>
                     </PublicRoute>
                   } 
                 />
@@ -124,7 +126,9 @@ function App() {
                   path="/register" 
                   element={
                     <PublicRoute>
-                      <Register />
+                      <Layout>
+                        <Register />
+                      </Layout>
                     </PublicRoute>
                   } 
                 />
